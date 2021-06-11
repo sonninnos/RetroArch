@@ -38517,6 +38517,17 @@ static enum runloop_state runloop_check_state(
    }
 #endif
 
+   /* Keep trying to reinit audio if
+    * audio driver is not active (as in failed), yet still desired */
+   if (!p_rarch->audio_driver_active &&
+         p_rarch->configuration_settings->bools.audio_enable &&
+         (p_rarch->video_driver_frame_count % 100) == 0
+      )
+   {
+      p_rarch->audio_driver_active = true;
+      command_event(CMD_EVENT_AUDIO_REINIT, NULL);
+   }
+
    return RUNLOOP_STATE_ITERATE;
 }
 
