@@ -866,6 +866,8 @@ typedef struct
    char cached_driver_id[32];
 
    uint8_t frame_rest;
+   uint8_t frame_time_count_pos_avg;
+   uint8_t frame_delay_leftover_count;
    uint8_t frame_delay_target;
    uint8_t frame_delay_effective;
    bool frame_delay_pause;
@@ -1126,8 +1128,7 @@ bool *video_driver_get_threaded(void);
 void video_driver_set_threaded(bool val);
 
 void video_frame_delay(video_driver_state_t *video_st,
-      settings_t *settings,
-      bool core_paused);
+      settings_t *settings);
 
 void video_frame_delay_auto(video_driver_state_t *video_st,
       video_frame_delay_auto_t *vfda);
