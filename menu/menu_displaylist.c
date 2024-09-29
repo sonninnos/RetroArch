@@ -9804,7 +9804,7 @@ unsigned menu_displaylist_build_list(
                   count++;
                if (MENU_DISPLAYLIST_PARSE_SETTINGS_ENUM(list,
                         MENU_ENUM_LABEL_VIDEO_SCALE_INTEGER_OVERSCALE,
-                        PARSE_ONLY_BOOL, false) == 0)
+                        PARSE_ONLY_UINT, false) == 0)
                   count++;
                if (MENU_DISPLAYLIST_PARSE_SETTINGS_ENUM(list,
                         MENU_ENUM_LABEL_VIDEO_VIEWPORT_BIAS_X,

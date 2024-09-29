@@ -2349,7 +2349,7 @@ void video_viewport_get_scaled_integer(struct video_viewport *vp,
    settings_t *settings            = config_get_ptr();
    video_driver_state_t *video_st  = &video_driver_st;
    unsigned video_aspect_ratio_idx = settings->uints.video_aspect_ratio_idx;
-   bool overscale                  = settings->bools.video_scale_integer_overscale;
+   int overscale                   = settings->uints.video_scale_integer_overscale;
    int padding_x                   = 0;
    int padding_y                   = 0;
    float viewport_bias_x           = settings->floats.video_viewport_bias_x;
@@ -2409,7 +2409,29 @@ void video_viewport_get_scaled_integer(struct video_viewport *vp,
          /* X/Y scale must be same. */
          unsigned max_scale = 1;
 
-         if (overscale)
+         if (overscale == 2)
+         {
+            unsigned overscale = MIN(
+                  (width / content_width) + !!(width % content_width),
+                  (height / content_height) + !!(height % content_height));
+            unsigned underscale = MIN(width / content_width, height / content_height);
+
+            unsigned overscale_diff = content_height * overscale - height;
+            unsigned underscale_diff = height - content_height * underscale;
+             
+            max_scale = underscale;
+
+            printf("%s W %d / %d = %d + %d - H %d / %d = %d + %d, %d %d\n", __func__,
+                  width, content_width, width / content_width, !!(width % content_width),
+                  height, content_height, height / content_height, !!(height % content_height),
+                  overscale_diff, underscale_diff
+                  );
+
+            if (     (overscale_diff < underscale_diff && content_height / overscale_diff > 1.5f/* && overscale_diff < 60*/)
+                  || (overscale_diff == underscale_diff))
+               max_scale = overscale;
+         }
+         else if (overscale)
             max_scale = MIN((width / content_width) + !!(width % content_width),
                             (height / content_height) + !!(height % content_height));
          else
@@ -2430,7 +2452,7 @@ void video_viewport_get_scaled_integer(struct video_viewport *vp,
    }
    x += padding_x * viewport_bias_x;
    y += padding_y * viewport_bias_y;
-
+printf("%s %d %d %f - %d %d %f\n", __func__, x, padding_x, viewport_bias_x, y, padding_y, viewport_bias_y);
    vp->width  = width;
    vp->height = height;
    vp->x      = x;

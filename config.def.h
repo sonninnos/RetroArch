@@ -520,7 +520,7 @@
  * Overscale rounds up instead of down, default is downscale.
  */
 #define DEFAULT_SCALE_INTEGER false
-#define DEFAULT_SCALE_INTEGER_OVERSCALE false
+#define DEFAULT_SCALE_INTEGER_OVERSCALE 0
 
 /* Controls aspect ratio handling. */
 
