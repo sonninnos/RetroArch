@@ -9,7 +9,7 @@
 #endif
 
 #ifdef WANT_RAW_DATA_SECTOR
-extern const uint8_t s_cd_sync_header[12];
+static const uint8_t s_cd_sync_header[12] = { 0x00,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x00 };
 #endif
 
 typedef uint64_t UINT64;

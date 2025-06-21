@@ -308,4 +308,3 @@ chd_error cdzl_codec_decompress(void *codec, const uint8_t *src, uint32_t comple
 	}
 	return CHDERR_NONE;
 }
-
