@@ -2352,10 +2352,6 @@ MSG_HASH(
 /* Settings > Input > Port # Controls */
 
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Perangkat Tempahan untuk Pemain Ini"
-   )
-MSG_HASH(
    MENU_ENUM_LABEL_VALUE_DEVICE_RESERVATION_NONE,
    "Tanpa Tempahan"
    )

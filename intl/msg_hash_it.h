@@ -3924,10 +3924,6 @@ MSG_HASH(
    "Il controller fisico riconosciuto da RetroArch."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Dispositivo riservato per questo giocatore"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Questo controller sarà assegnato per questo giocatore, in base alla modalità di prenotazione."
    )

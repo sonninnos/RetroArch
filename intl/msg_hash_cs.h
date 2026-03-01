@@ -3696,10 +3696,6 @@ MSG_HASH(
    "Fyzický ovladač rozpoznaný aplikací RetroArch."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Rezervované zařízení pro tento přehrávač"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Tento ovladač bude tomuto hráči přidělen podle režimu rezervace."
    )

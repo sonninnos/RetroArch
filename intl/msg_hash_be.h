@@ -3768,10 +3768,6 @@ MSG_HASH(
    "Фізічны кантролер, апазнаны RetroArch."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Прылада для дадзенага гульца"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Абраны кантролер будзе прысвоены бягучаму гульцу паводле рэжыму рэзервавання."
    )

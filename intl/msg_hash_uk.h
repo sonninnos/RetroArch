@@ -4000,10 +4000,6 @@ MSG_HASH(
    "Фізичний контролер, визнаний RetroArch."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Зарезервований пристрій для цього гравця"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Цей контролер буде виділено для цього гравця відповідно до режиму резервування."
    )

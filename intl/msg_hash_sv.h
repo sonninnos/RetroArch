@@ -3924,10 +3924,6 @@ MSG_HASH(
    "Den fysiska kontrollern som den känns igen av RetroArch."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Reserverad enhet för denna spelare"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Den här kontrollenheten kommer att tilldelas den här spelaren, enligt reservationsläget."
    )

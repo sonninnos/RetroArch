@@ -4072,10 +4072,6 @@ MSG_HASH(
    "An rialtóir fisiceach mar a aithníonn RetroArch é."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Gléas In Áirithe don Imreoir seo"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Déanfar an rialtóir seo a leithdháileadh don imreoir seo, de réir an mhodha áirithinte."
    )

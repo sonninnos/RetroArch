@@ -3932,10 +3932,6 @@ MSG_HASH(
    "RetroArch tarafından tanınan fiziksel kontrolcü."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Bu Oyuncu için Ayrılmış Cihaz"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Bu kontrolcü, rezervasyon kipine göre bu oynatıcı için ayrılacaktır."
    )

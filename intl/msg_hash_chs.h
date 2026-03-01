@@ -3972,10 +3972,6 @@ MSG_HASH(
    "RetroArch识别的物理控制器。"
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "为此播放器所保留的设备"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "根据预设模式，该控制器将分配给此玩家。"
    )

@@ -4048,10 +4048,6 @@ MSG_HASH(
    "A RetroArch által felismert tényleges kontroller."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Fenntartott eszköz"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Ez a kontroller lesz ehhez a játékoshoz rendelve, ha a foglalási mód be van állítva."
    )

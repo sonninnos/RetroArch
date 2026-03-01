@@ -4064,10 +4064,6 @@ MSG_HASH(
    "El controlador físic tal qual el reconeix RetroArch."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "Dispositiu reservat per aquest jugador"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "Aquest controlador serà assignat a aquest jugador seguint el mode de reserva."
    )

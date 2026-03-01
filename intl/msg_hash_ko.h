@@ -4104,10 +4104,6 @@ MSG_HASH(
    "RetroArch가 인식하는 물리적 컨트롤러입니다."
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_DEVICE_RESERVED_DEVICE_NAME,
-   "이 플레이어에게 예약된 장치"
-   )
-MSG_HASH(
    MENU_ENUM_SUBLABEL_INPUT_DEVICE_RESERVED_DEVICE_NAME,
    "예약 형식에 따라, 이 컨트롤러를 이 플레이어에게 할당합니다."
    )
