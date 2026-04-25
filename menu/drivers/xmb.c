@@ -8362,6 +8362,19 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
             coord_black,
             coord_white);
 
+   /* Visual consistency during deferred context reset:
+    * xmb_render() set pending_context_reset on a scale-factor /
+    * layout change; the actual reset (which rebuilds icon_size,
+    * margins, fonts and textures at the new scale) won't fire
+    * until the counter reaches 0 — see the comment in xmb_render().
+    * In the interim frames, layout values and asset sizes are
+    * mismatched, which produces a visible flash. Skip everything
+    * past the background quad (icons, text, ribbon-overlay items,
+    * cursor, message box) until the reset completes; the gradient
+    * we just drew is the entire frame for those 1-2 frames. */
+   if (xmb->pending_context_reset > 0)
+      goto ctx_destroyed;
+
    selection = menu_st->selection_ptr;
 
    if (!p_disp->dispctx->handles_transform)
