@@ -488,7 +488,6 @@ static bool cocoa_gl_gfx_ctx_set_video_mode(void *data,
    mode.fullscreen      = fullscreen;
    [apple_platform setVideoMode:mode];
    cocoa_show_mouse(data, !fullscreen);
-   has_went_fullscreen = fullscreen;
 #else
    /* Hand-rolled fullscreen for the non-Metal path.
     *
@@ -608,6 +607,8 @@ static bool cocoa_gl_gfx_ctx_set_video_mode(void *data,
 
       [[g_view window] setContentSize:NSMakeSize(width, height)];
    }
+
+   has_went_fullscreen = fullscreen;
 #endif
 
    return true;
