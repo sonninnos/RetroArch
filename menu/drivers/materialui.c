@@ -578,7 +578,8 @@ enum materialui_handle_flags
    MUI_FLAG_SCROLLBAR_ACTIVE                = (1 << 25),
    MUI_FLAG_SCROLLBAR_DRAGGED               = (1 << 26),
    MUI_FLAG_NAVBAR_MENU_NAVIGATION_WRAPPED  = (1 << 27),
-   MUI_FLAG_COL_DIVIDER_IS_LIST_BG          = (1 << 28)
+   MUI_FLAG_COL_DIVIDER_IS_LIST_BG          = (1 << 28),
+   MUI_FLAG_FIRST_FRAME                     = (1 << 29)
 };
 
 typedef struct materialui_handle
@@ -8183,6 +8184,11 @@ static void materialui_frame(void *data, video_frame_info_t *video_info)
    if (ctx_gen != mui->context_generation)
       goto ctx_destroyed;
 
+   /* First-frame init done — subsequent frames are normal.
+    * Cleared here (not on entry) so that a context-destroyed
+    * mid-frame leaves the flag set for the retry. */
+   mui->flags &= ~MUI_FLAG_FIRST_FRAME;
+
    /* Unbind fonts */
    font_unbind(&mui->font_data.title);
    font_unbind(&mui->font_data.list);
@@ -9120,6 +9126,7 @@ static void *materialui_init(void **userdata, bool video_is_threaded)
    mui->dip_base_unit_size                = mui->last_scale_factor
       * MUI_DIP_BASE_UNIT_SIZE;
    mui->flags                             = 0;
+   mui->flags                            |= MUI_FLAG_FIRST_FRAME;
 
    if (settings->bools.menu_materialui_show_nav_bar)
       mui->flags |= MUI_FLAG_LAST_SHOW_NAVBAR;
@@ -9545,6 +9552,26 @@ static void materialui_init_transition_animation(materialui_handle_t *mui,
    uintptr_t             alpha_tag     = (uintptr_t)&mui->transition_alpha;
    uintptr_t             x_offset_tag  = (uintptr_t)&mui->transition_x_offset;
    unsigned transition_animation       = settings->uints.menu_materialui_transition_animation;
+
+   /* Skip the transition animation on the very first frame after
+    * init: materialui_populate_entries() runs from menu_driver_init
+    * before the first materialui_frame, and this animation zeros
+    * out transition_alpha — which scales the alpha of entry text,
+    * icons, the highlight and other UI chrome but NOT the title
+    * bar or the nav bar.  The result is a few frames of half-
+    * rendered menu (header + nav bar but no entries) until the
+    * alpha animates up to 1.0.
+    *
+    * The menu has no prior state to fade in from at startup, so
+    * skipping the animation here is the right move; matches the
+    * is_first_frame -> animate=false pattern used in ozone. */
+   if (mui->flags & MUI_FLAG_FIRST_FRAME)
+   {
+      mui->transition_alpha    = 1.0f;
+      mui->transition_x_offset = 0.0f;
+      mui->last_stack_size     = stack_size;
+      return;
+   }
 
    /* If animations are disabled, reset alpha/x offset
     * values and return immediately */
