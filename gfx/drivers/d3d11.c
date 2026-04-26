@@ -3240,6 +3240,11 @@ static void *d3d11_gfx_init(const video_info_t* video,
    if (settings->bools.video_waitable_swapchains)
       d3d11->flags |=  D3D11_ST_FLAG_WAITABLE_SWAPCHAINS;
 
+   if (video->vsync)
+      d3d11->flags |=  D3D11_ST_FLAG_VSYNC;
+   else
+      d3d11->flags &= ~D3D11_ST_FLAG_VSYNC;
+
 #ifdef __WINRT__
    if (!d3d11_init_swapchain(d3d11,
             d3d11->vp.full_width,
@@ -3274,11 +3279,6 @@ static void *d3d11_gfx_init(const video_info_t* video,
       d3d11->flags       |=  D3D11_ST_FLAG_KEEP_ASPECT;
    else
       d3d11->flags       &= ~D3D11_ST_FLAG_KEEP_ASPECT;
-
-   if (video->vsync)
-      d3d11->flags       |=  D3D11_ST_FLAG_VSYNC;
-   else
-      d3d11->flags       &= ~D3D11_ST_FLAG_VSYNC;
 
    d3d11->format          = (video->rgb32)
          ? DXGI_FORMAT_B8G8R8X8_UNORM : DXGI_FORMAT_B5G6R5_UNORM;

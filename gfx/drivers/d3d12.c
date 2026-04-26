@@ -4288,6 +4288,11 @@ static void *d3d12_gfx_init(const video_info_t* video,
    else
       d3d12->flags &= ~D3D12_ST_FLAG_WAITABLE_SWAPCHAINS;
 
+   if (video->vsync)
+      d3d12->flags |=  D3D12_ST_FLAG_VSYNC;
+   else
+      d3d12->flags &= ~D3D12_ST_FLAG_VSYNC;
+
    d3d_input_driver(settings->arrays.input_driver,
          settings->arrays.input_joypad_driver, input, input_data);
 
@@ -4426,11 +4431,6 @@ static void *d3d12_gfx_init(const video_info_t* video,
       d3d12->flags             |=  D3D12_ST_FLAG_KEEP_ASPECT;
    else
       d3d12->flags             &= ~D3D12_ST_FLAG_KEEP_ASPECT;
-
-   if (video->vsync)
-      d3d12->flags             |=  D3D12_ST_FLAG_VSYNC;
-   else
-      d3d12->flags             &= ~D3D12_ST_FLAG_VSYNC;
 
    d3d12->format                = (video->rgb32)
       ? DXGI_FORMAT_B8G8R8X8_UNORM : DXGI_FORMAT_B5G6R5_UNORM;

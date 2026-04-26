@@ -4494,13 +4494,6 @@ void runloop_set_video_swap_interval(
       return;
    }
 
-   /* Scanline sync needs swap interval 0 */
-   if (settings->bools.video_scanline_sync)
-   {
-      runloop_st->video_swap_interval_auto = 0;
-      return;
-   }
-
    /* > If VRR is enabled, swap interval is irrelevant,
     *   just set to 1
     * > If core fps is higher than display refresh rate,
