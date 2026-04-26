@@ -471,6 +471,25 @@ static void gl1_raster_font_upload_atlas(gl1_raster_t *font)
          break;
    }
 
+   /* The temp buffer is a tightly packed POT-sized GL_LUMINANCE_ALPHA
+    * image: each row is exactly font->tex_width * 2 bytes with no
+    * padding. Force the pixel-unpack state to match that before
+    * uploading. Without this, the upload inherits whatever state the
+    * GL context happens to be in at the time of the first font init.
+    * In practice on Windows/NVIDIA, GL_UNPACK_ROW_LENGTH can come up
+    * non-zero from the WGL/driver setup, which makes glTexImage2D
+    * read source rows at the wrong stride. The texture ends up with
+    * glyphs shifted into wrong slots — visually the title and sidebar
+    * fonts (the first ones uploaded) render as horizontal stripe
+    * patterns instead of letters, while later fonts that re-upload
+    * after gl1_draw_tex has reset state happen to come out correct.
+    *
+    * gl3 follows the same pattern in gl3_raster_font_upload_atlas. */
+#ifndef VITA
+   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+
    glTexImage2D(GL_TEXTURE_2D, 0, gl_internal, font->tex_width, font->tex_height,
          0, gl_format, GL_UNSIGNED_BYTE, tmp);
 
@@ -1445,6 +1464,13 @@ static void gl1_draw_tex(gl1_t *gl1, int pot_width, int pot_height, int width, i
    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, pot_width, pot_height, 0, format, type, frame);
    if (frame_rgba)
        free(frame_rgba);
+
+#ifndef VITA
+   /* Restore default row length so subsequent uploads (e.g. font atlas
+    * uploads, or any other glTexImage2D in the rest of the frame path)
+    * don't inherit pot_width as the source stride. */
+   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
 
    if (tex == gl1->tex)
    {
