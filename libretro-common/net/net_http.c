@@ -1383,7 +1383,7 @@ static ssize_t net_http_receive_header(struct http_t *state, ssize_t len)
    {
       len           = response->pos;
       response->pos = 0;
-      if (response->bodytype == T_LEN)
+      if (response->bodytype == T_LEN && response->len > 0)
       {
          /* Use a tmp pointer so a realloc failure does not leak the
           * original buffer AND leave response->data NULL for later
@@ -1428,7 +1428,7 @@ static bool net_http_receive_body(struct http_t *state, ssize_t newlen)
       if (response->bodytype != T_FULL)
          return false;
       response->part      = P_DONE;
-      if (response->buflen != response->len)
+      if (response->buflen != response->len && response->len > 0)
       {
          /* Shrink response->data from buflen bytes to len bytes.
           * Use a tmp pointer so a realloc() failure (rare on shrink
@@ -1535,7 +1535,7 @@ parse_again:
       else if (response->pos == response->len)
       {
          response->part = P_DONE;
-         if (response->buflen != response->len)
+         if (response->buflen != response->len && response->len > 0)
          {
             char *tmp = (char*)realloc(response->data, response->len);
             if (!tmp)
