@@ -499,6 +499,12 @@ typedef struct xmb_handle
    bool is_state_slot;
    bool libretro_running;
 
+   /* True from xmb_init() until the first xmb_frame() completes.
+    * Used to skip the toggle-fade-in that would otherwise render
+    * the very first frame at alpha=0 (a black screen) before the
+    * fade-in animation starts. */
+   bool is_first_frame;
+
    /* Whether to show entry index for current list */
    bool entry_idx_enabled;
 
@@ -9265,6 +9271,11 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
    if (ctx_gen != xmb->context_generation)
       goto ctx_destroyed;
 
+   /* First-frame init done — subsequent frames are normal.
+    * Cleared after the last ctx-destroyed guard so that a context
+    * death mid-frame leaves the flag set for the retry. */
+   xmb->is_first_frame = false;
+
    if (xmb->font && xmb->font->renderer && xmb->font->renderer->flush)
       xmb->font->renderer->flush(video_width,
             video_height, xmb->font->renderer_data);
@@ -9458,6 +9469,7 @@ static void *xmb_init(void **userdata, bool video_is_threaded)
    xmb->old_depth                     = 1;
    xmb->alpha                         = 0.0f;
    xmb->alpha_list                    = 1.0f;
+   xmb->is_first_frame                = true;
 
    xmb_refresh_system_tabs_list(xmb);
 
@@ -9941,7 +9953,20 @@ static void xmb_toggle(void *userdata, bool menu_on)
       menu_st->flags         |=  MENU_ST_FLAG_PREVENT_POPULATE;
 
    xmb_toggle_horizontal_list(xmb);
-   xmb_fade_in(xmb);
+
+   /* Skip the fade-in on the very first frame after init: at
+    * startup xmb_toggle(true) fires from retroarch_menu_running()
+    * before the first xmb_frame, and xmb_fade_in animates xmb->alpha
+    * from its init value of 0 up to items_active_alpha over ~200ms.
+    * xmb->alpha gates the entire menu including the wallpaper, so
+    * the first ~12 frames render as a fully black screen before the
+    * menu appears. The menu has no prior state to fade in from at
+    * startup, so jump straight to full opacity instead. Subsequent
+    * toggles (menu hotkey from gameplay) are unaffected. */
+   if (xmb->is_first_frame)
+      xmb->alpha = xmb->items_active_alpha;
+   else
+      xmb_fade_in(xmb);
 }
 
 static int xmb_deferred_push_content_actions(menu_displaylist_info_t *info)
