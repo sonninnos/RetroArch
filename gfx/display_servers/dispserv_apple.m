@@ -88,7 +88,7 @@ static bool apple_display_server_set_window_progress(void *data, int progress, b
        *   - qb/top-level Makefile:  MRC (not in the per-file ARC
        *     override list at Makefile:275 alongside metal.o /
        *     mfi_joypad.o / coreaudio3.o).
-       *   - pkg/apple/*.xcodeproj:  ARC, via griffin_objc.m which
+       *   - pkg/apple/<anyfile>.xcodeproj:  ARC, via griffin_objc.m which
        *     #include's this file into a TU compiled with
        *     CLANG_ENABLE_OBJC_ARC=YES (pkg/apple/BaseConfig.xcconfig:182).
        *
