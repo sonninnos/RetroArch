@@ -11961,6 +11961,24 @@ static void ozone_frame(void *data, video_frame_info_t *video_info)
       ozone->cursor_x_old = ozone->pointer.x;
       ozone->cursor_y_old = ozone->pointer.y;
       ozone->flags       &= ~OZONE_FLAG_FIRST_FRAME;
+
+      /* If ozone_render() hasn't run yet (which is the case at
+       * startup when settings->uints.menu_startup_page != Main Menu —
+       * the runloop's PENDING_STARTUP_PAGE branch handles the list
+       * swap and doesn't fall through to menu_driver_iterate()),
+       * NEED_COMPUTE is still set and entry node positions are
+       * uninitialised.  Drawing entries at this point produces
+       * every entry overlapping at the header offset.  Compute
+       * them inline now so the very first frame renders correctly. */
+      if (ozone->flags & OZONE_FLAG_NEED_COMPUTE)
+      {
+         file_list_t *fl_compute = MENU_LIST_GET_SELECTION(menu_list, 0);
+         ozone_compute_entries_position(ozone,
+               settings->bools.savestate_thumbnail_enable,
+               settings->bools.menu_show_sublabels,
+               fl_compute ? fl_compute->size : 0);
+         ozone->flags &= ~OZONE_FLAG_NEED_COMPUTE;
+      }
    }
 
    /* OSK Fade detection */
