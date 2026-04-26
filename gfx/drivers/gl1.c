@@ -840,14 +840,29 @@ static void gl1_raster_font_render_msg(
       font->block->fullscreen = full_screen;
 
    {
-      unsigned width          = gl->video_width;
-      unsigned height         = gl->video_height;
+      /* gl->video_width/height holds the core's emulated frame size
+       * (e.g. 256x224), not the window size — gl1 reuses that field
+       * for texture upload bookkeeping. The font viewport must cover
+       * the full window, so use screen_width/height instead. Fall
+       * back to video_width/height if the context driver did not
+       * report a screen size yet. */
+      unsigned width          = gl->screen_width
+         ? gl->screen_width  : gl->video_width;
+      unsigned height         = gl->screen_height
+         ? gl->screen_height : gl->video_height;
       float inv_tex_size_x    = 1.0f / font->tex_width;
       float inv_tex_size_y    = 1.0f / font->tex_height;
-      float inv_win_width     = 1.0f / gl->vp.width;
-      float inv_win_height    = 1.0f / gl->vp.height;
+      float inv_win_width;
+      float inv_win_height;
+      /* setup_viewport may change gl->vp, so capture inv_win_width/height
+       * AFTER it runs — otherwise the vertex math uses one viewport while
+       * the actual glViewport is another, producing stretched/squished
+       * text. The block path defers setup_viewport to flush time and uses
+       * gl->vp as-is. */
       if (!font->block)
          gl1_raster_font_setup_viewport(gl, width, height, font, full_screen);
+      inv_win_width           = 1.0f / gl->vp.width;
+      inv_win_height          = 1.0f / gl->vp.height;
 
       if (msg && *msg
             && font->font_data  && font->font_driver)
