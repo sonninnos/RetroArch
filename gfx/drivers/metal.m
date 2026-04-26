@@ -4300,7 +4300,7 @@ typedef struct MTLALIGN(16)
 
 - (void)drawWithContext:(Context *)ctx
 {
-   int i;
+   size_t i;
    _texture = _engine.frame.texture[0].view;
 
    if (     (_format != RPixelFormatBGRA8Unorm)
@@ -4938,7 +4938,7 @@ typedef struct MTLALIGN(16)
 
 - (void)drawWithEncoder:(id<MTLRenderCommandEncoder>)rce
 {
-   int i;
+   size_t i;
    NSUInteger count;
 #if !defined(HAVE_COCOATOUCH)
    if (_vertDirty)

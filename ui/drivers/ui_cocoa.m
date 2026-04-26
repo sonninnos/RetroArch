@@ -681,7 +681,7 @@ static ui_application_t ui_application_cocoa = {
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
-   unsigned i;
+   int i;
    apple_platform   = self;
    [self.window setAcceptsMouseMovedEvents: YES];
 
