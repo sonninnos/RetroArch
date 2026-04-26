@@ -248,7 +248,7 @@ typedef NS_ENUM(NSUInteger, ViewportResetMode) {
 
 @interface Filter : NSObject
 
-@property (nonatomic, readwrite) id<FilterDelegate> delegate;
+@property (nonatomic, readwrite, assign) id<FilterDelegate> delegate;
 @property (nonatomic, readonly) id<MTLSamplerState> sampler;
 
 - (void)apply:(id<MTLCommandBuffer>)cb in:(id<MTLTexture>)tin out:(id<MTLTexture>)tout;
