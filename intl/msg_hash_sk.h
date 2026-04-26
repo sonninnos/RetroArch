@@ -2480,6 +2480,10 @@ MSG_HASH(
    "Žiadna rezervácia"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_DEVICE_RESERVATION_PREFERRED,
+   "Preferované"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_DEVICE_RESERVATION_RESERVED,
    "Rezervované"
    )
@@ -2852,6 +2856,10 @@ MSG_HASH(
 
 /* Settings > On-Screen Display */
 
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_ONSCREEN_OVERLAY_SETTINGS,
+   "Prekrytie na obrazovke"
+   )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_ONSCREEN_VIDEO_LAYOUT_SETTINGS,
    "Rozloženie videa"
@@ -4116,6 +4124,10 @@ MSG_HASH(
    MENU_ENUM_LABEL_VALUE_SCAN_ENTRY,
    "Vyhľadať"
    )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_SCAN_USE_DB,
+   "Kontrola databázy"
+   )
 
 /* Import Content > Scan File */
 
@@ -4303,6 +4315,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_EXPLORE_DELETE_VIEW,
    "Vymazať tento pohľad"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_EXPLORE_VIEW_SAVED,
+   "Pohľad bol uložený"
    )
 
 /* Playlist > Playlist Item */
@@ -4524,6 +4540,10 @@ MSG_HASH(
 
 /* Quick Menu > Controls > Manage Remap Files */
 
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_REMAP_FILE_INFO,
+   "Aktívny súbor premapovania"
+   )
 
 /* Quick Menu > Controls > Manage Remap Files > Load Remap File */
 
@@ -4564,6 +4584,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_CHEAT_SEARCH_GTE_VAL,
    "Väčšie alebo rovné ako predtým"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CHEAT_DELETE_MATCH,
+   "Vymazať zhodu #"
    )
 
 /* Quick Menu > Cheats > Load Cheat File (Replace) */
@@ -4707,6 +4731,10 @@ MSG_HASH(
 
 /* Quick Menu > Overrides */
 
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_OVERRIDE_FILE_SAVE_AS,
+   "Uložiť prepísania ako"
+   )
 
 /* Quick Menu > Achievements */
 
@@ -4988,6 +5016,14 @@ MSG_HASH(
    "Nastaviť na hodnotu"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_CHEAT_TYPE_INCREASE_VALUE,
+   "Zvýšiť o hodnotu"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_CHEAT_TYPE_DECREASE_VALUE,
+   "Znížiť o hodnotu"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_CHEAT_HANDLER_TYPE_EMU,
    "Emulátor"
    )
@@ -5026,6 +5062,14 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_PLAYLIST_MANAGER_SORT_MODE_OFF,
    "Žiadne"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PLAYLIST_MANAGER_LABEL_DISPLAY_MODE_REMOVE_PARENS,
+   "Odstrániť obsah ()"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_PLAYLIST_MANAGER_LABEL_DISPLAY_MODE_REMOVE_BRACKETS,
+   "Odstrániť obsah []"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_PLAYLIST_MANAGER_LABEL_DISPLAY_MODE_REMOVE_PARENS_AND_BRACKETS,
@@ -5108,8 +5152,16 @@ MSG_HASH(
    "Nepodporované"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CHEEVOS_RECENTLY_UNLOCKED_ENTRY,
+   "Nedávno odomknuté"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_CHEEVOS_ALMOST_THERE_ENTRY,
    "Takmer hotovo"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CHEEVOS_ACTIVE_CHALLENGES_ENTRY,
+   "Aktívne výzvy"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_CHEEVOS_NOTIFICATIONS_ONLY,
@@ -5229,6 +5281,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_RGUI_MENU_COLOR_THEME,
    "Farebná téma"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_RGUI_MENU_THEME_PRESET,
+   "Vlastná predvoľba motívu"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_MENU_RGUI_TRANSPARENCY,
@@ -5660,6 +5716,10 @@ MSG_HASH(
    "Vymeniť ikony"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_MATERIALUI_SHOW_NAV_BAR,
+   "Zobraziť navigačný panel"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_MATERIALUI_MENU_COLOR_THEME,
    "Farebná téma"
    )
@@ -5970,6 +6030,10 @@ MSG_HASH(
    "Vybrať tému"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_QT_FILE_PATH_IS_BLANK,
+   "Cesta súboru je prázdna."
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_QT_FILE_IS_EMPTY,
    "Súbor je prázdny."
    )
@@ -6110,6 +6174,10 @@ MSG_HASH(
    "Použiť"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_QT_SHADER_ADD_PASS,
+   "Pridať povolenie"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_QT_DOWNLOAD_THUMBNAIL,
    "Stiahnuť miniatúru"
    )
@@ -6147,6 +6215,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_HORIZONTAL_MENU,
    "Vodorovná ponuka"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_OVERLAY_SETTINGS,
+   "Prekrytie na obrazovke"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_LOAD_CONTENT_HISTORY,
@@ -6295,6 +6367,10 @@ MSG_HASH(
    "%.*s sa pripojil so vstupnými zariadeniami %.*s"
    )
 MSG_HASH(
+   MSG_NETPLAY_PLAYERS_INFO,
+   "%d hráč(ov)"
+   )
+MSG_HASH(
    MSG_NETPLAY_INCORRECT_PASSWORD,
    "Nesprávne heslo"
    )
@@ -6388,8 +6464,16 @@ MSG_HASH(
    "Nájdený posledný slot so stavom"
    )
 MSG_HASH(
+   MSG_REPLAY_SEEK_TO_NEXT_CHECKPOINT,
+   "Vyhľadať dopredu"
+   )
+MSG_HASH(
    MSG_FRAMES,
    "Snímky"
+   )
+MSG_HASH(
+   MSG_GAME_FOCUS_ON,
+   "Zameranie hry zapnuté"
    )
 MSG_HASH(
    MSG_INPUT_RENAME_ENTRY,
@@ -6470,6 +6554,14 @@ MSG_HASH(
 MSG_HASH(
    MSG_SCREENSHOT_SAVED,
    "Snímka uložená"
+   )
+MSG_HASH(
+   MSG_LEADERBOARD_RANK,
+   "Hodnotenie: %d" /* Rank: [leaderboard rank] */
+   )
+MSG_HASH(
+   MSG_LEADERBOARD_BEST,
+   "Najlepšie: %s" /* Best: [value] */
    )
 MSG_HASH(
    MSG_CHANGE_THUMBNAIL_TYPE,
@@ -6556,6 +6648,10 @@ MSG_HASH(
    "Dokončené %s"
    )
 MSG_HASH(
+   MSG_CHEEVOS_UNSUPPORTED_COUNT,
+   "%d nepodporované"
+)
+MSG_HASH(
    MSG_RESAMPLER_QUALITY_LOWEST,
    "Najnižsie"
    )
@@ -6574,6 +6670,10 @@ MSG_HASH(
 MSG_HASH(
    MSG_RESAMPLER_QUALITY_HIGHEST,
    "Najvyššie"
+   )
+MSG_HASH(
+   MSG_DUMPING_DISC,
+   "Kopírovanie disku..."
    )
 MSG_HASH(
    MSG_DRIVE_NUMBER,
@@ -6636,6 +6736,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_FILE_BROWSER_OPEN_PICKER,
    "Otvoriť..."
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_VIDEO_FILTER_FLICKER,
+   "Filter blikania"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_GAMMA,
@@ -6809,9 +6913,17 @@ MSG_HASH(
    "Mierka myši"
    )
 #endif
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_INPUT_TOUCH_SCALE,
+   "Stupnica dotyku"
+   )
 #ifdef UDEV_TOUCH_SUPPORT
 #endif
 #ifdef HAVE_ODROIDGO2
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_VIDEO_RGA_SCALING,
+   "RGA škálovanie"
+   )
 #else
 #endif
 #ifdef _3DS
@@ -6844,6 +6956,10 @@ MSG_HASH(
    "Načítať \nbod obnovy"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_BOTTOM_FONT_ENABLE,
+   "Povolenie písma"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_BOTTOM_FONT_SCALE,
    "Mierka písma"
    )
@@ -6865,9 +6981,21 @@ MSG_HASH(
    "Herné AI"
    )
 
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_GAME_AI_OVERRIDE_P1,
+   "Prepísať p1"
+   )
+
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_GAME_AI_OVERRIDE_P2,
+   "Prepísať p2"
+   )
 
 
-
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_QUICK_MENU_SHOW_GAME_AI,
+   "Zobraziť 'Herné AI'"
+   )
 #endif
 #ifdef HAVE_SMBCLIENT
 MSG_HASH(
@@ -6879,12 +7007,20 @@ MSG_HASH(
    "SMB server"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_SMB_CLIENT_SHARE,
+   "Názov zdieľania SMB"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_SMB_CLIENT_USERNAME,
    "SMB meno"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_SMB_CLIENT_PASSWORD,
    "SMB heslo"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_SMB_CLIENT_WORKGROUP,
+   "SMB skupina"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_SMB_CLIENT_SMB_SHARE,
