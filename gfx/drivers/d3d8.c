@@ -224,8 +224,8 @@ static bool d3d8_initialize_symbols(enum gfx_ctx_api api)
       RARCH_ERR("[D3D8] Failed to load d3d8.dll: %s\n",
             dylib_error() ? dylib_error() : "(no error reported)");
       RARCH_ERR("[D3D8] The legacy DirectX 8 runtime is not present "
-            "on this system. Install it (e.g. via the legacy DirectX "
-            "End-User Runtimes from Microsoft) or pick a different "
+            "on this system. Drop a matching d3d8.dll and d3d9.dll"
+            "(e.g. from DXVK) next to retroarch.exe, or pick a different "
             "video driver.\n");
       return false;
    }
@@ -1404,17 +1404,20 @@ static void d3d8_set_nonblock_state(void *data, bool state,
       bool adaptive_vsync_enabled,
       unsigned swap_interval)
 {
-   int      interval            = 0;
-   d3d8_video_t            *d3d = (d3d8_video_t*)data;
+#ifdef _XBOX
+   int interval      = 0;
+#endif
+   d3d8_video_t *d3d = (d3d8_video_t*)data;
 
    if (!d3d)
       return;
 
-   if (!state)
-      interval                  = 1;
    d3d->video_info.vsync        = !state;
 
 #ifdef _XBOX
+   if (!state)
+      interval                  = 1;
+
    IDirect3DDevice8_SetRenderState(d3d->dev,
          D3D8_PRESENTATIONINTERVAL,
          interval ?
