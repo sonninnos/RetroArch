@@ -79,10 +79,12 @@
 #define D3D8_RGB565_FORMAT D3DFMT_LIN_R5G6B5
 #define D3D8_XRGB8888_FORMAT D3DFMT_LIN_X8R8G8B8
 #define D3D8_ARGB8888_FORMAT D3DFMT_LIN_A8R8G8B8
+#define D3D8_ARGB4444_FORMAT D3DFMT_LIN_A4R4G4B4
 #else
 #define D3D8_RGB565_FORMAT D3DFMT_R5G6B5
 #define D3D8_XRGB8888_FORMAT D3DFMT_X8R8G8B8
 #define D3D8_ARGB8888_FORMAT D3DFMT_A8R8G8B8
+#define D3D8_ARGB4444_FORMAT D3DFMT_A4R4G4B4
 #endif
 
 typedef struct d3d8_video
@@ -128,6 +130,14 @@ typedef struct d3d8_video
 
    /* Only used for Xbox */
    bool widescreen_mode;
+
+   /* Bit-depth of the data most recently uploaded to `menu->tex`.
+    * The menu texture is created with a fixed pixel format (16bpp
+    * ARGB4444 for the RGUI fast path, 32bpp ARGB8888 otherwise),
+    * so we must recreate it when set_menu_texture_frame is called
+    * with a different `rgb32` value.  Defaults to false; the first
+    * call will see a NULL tex and create one regardless. */
+   bool menu_tex_rgb32;
 } d3d8_video_t;
 
 typedef struct d3d8_renderchain
@@ -2000,17 +2010,25 @@ static void d3d8_set_menu_texture_frame(void *data,
    if (!d3d || !d3d->menu)
       return;
 
-   if (    !d3d->menu->tex            ||
-            d3d->menu->tex_w != width ||
-            d3d->menu->tex_h != height)
+   if (    !d3d->menu->tex                  ||
+            d3d->menu->tex_w   != width     ||
+            d3d->menu->tex_h   != height    ||
+            d3d->menu_tex_rgb32 != rgb32)
    {
       LPDIRECT3DTEXTURE8 tex = d3d->menu->tex;
       if (tex)
          IDirect3DTexture8_Release(tex);
 
+      /* RGUI sends 16bpp ARGB4444 (the d3d8 case in RGUI's pixel
+       * format dispatcher selects argb32_to_argb4444), so we can
+       * upload it byte-for-byte into a D3DFMT_A4R4G4B4 texture and
+       * skip the per-pixel CPU expansion to ARGB8888 the previous
+       * implementation did every frame.  The rgb32 path is preserved
+       * for callers that hand us 32bpp data; in current practice no
+       * such caller exists, but the API contract supports it. */
       d3d->menu->tex = d3d8_texture_new(d3d->dev,
             width, height, 1,
-            0, D3D8_ARGB8888_FORMAT,
+            0, rgb32 ? D3D8_ARGB8888_FORMAT : D3D8_ARGB4444_FORMAT,
             D3DPOOL_MANAGED, 0, 0, 0, NULL, NULL, false);
 
       if (!d3d->menu->tex)
@@ -2018,6 +2036,7 @@ static void d3d8_set_menu_texture_frame(void *data,
 
       d3d->menu->tex_w          = width;
       d3d->menu->tex_h          = height;
+      d3d->menu_tex_rgb32       = rgb32;
 #ifdef _XBOX
       d3d->menu->tex_coords [2] = width;
       d3d->menu->tex_coords[3]  = height;
@@ -2031,7 +2050,7 @@ static void d3d8_set_menu_texture_frame(void *data,
       if (IDirect3DTexture8_LockRect(tex,
                0, &d3dlr, NULL, D3DLOCK_NOSYSLOCK) == D3D_OK)
       {
-         unsigned h, w;
+         unsigned h;
 
          if (rgb32)
          {
@@ -2047,24 +2066,23 @@ static void d3d8_set_menu_texture_frame(void *data,
          }
          else
          {
-            uint32_t       *dst = (uint32_t*)d3dlr.pBits;
-            const uint16_t *src = (const uint16_t*)frame;
+            /* Direct ARGB4444 upload.  The bit layout produced by
+             * argb32_to_argb4444 (host-endian uint16_t with A in bits
+             * 15..12, R 11..8, G 7..4, B 3..0) matches D3DFMT_A4R4G4B4
+             * exactly: D3D reads the locked memory as host-endian
+             * 16-bit units with the same bit assignments, so the same
+             * source bytes work on LE PC and LE Original Xbox (NV2A
+             * via D3DFMT_LIN_*) without a byte swap. */
+            uint8_t        *dst = (uint8_t*)d3dlr.pBits;
+            const uint8_t  *src = (const uint8_t*)frame;
+            unsigned src_pitch  = width * sizeof(uint16_t);
+            unsigned row_bytes  = width * sizeof(uint16_t);
 
-            for (h = 0; h < height; h++, dst += d3dlr.Pitch >> 2, src += width)
+            for (h = 0; h < height; h++, dst += d3dlr.Pitch, src += src_pitch)
             {
-               for (w = 0; w < width; w++)
-               {
-                  uint16_t c = src[w];
-                  uint32_t r = (c >> 12) & 0xf;
-                  uint32_t g = (c >>  8) & 0xf;
-                  uint32_t b = (c >>  4) & 0xf;
-                  uint32_t a = (c >>  0) & 0xf;
-                  r          = ((r << 4) | r) << 16;
-                  g          = ((g << 4) | g) <<  8;
-                  b          = ((b << 4) | b) <<  0;
-                  a          = ((a << 4) | a) << 24;
-                  dst[w]     = r | g | b | a;
-               }
+               memcpy(dst, src, row_bytes);
+               if (d3dlr.Pitch > (int)row_bytes)
+                  memset(dst + row_bytes, 0, d3dlr.Pitch - row_bytes);
             }
          }
 
