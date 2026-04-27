@@ -68,6 +68,9 @@
 
 #include "../font_driver.h"
 #include "../gfx_display.h"
+#ifdef HAVE_GFX_WIDGETS
+#include "../gfx_widgets.h"
+#endif
 
 #include "../../core.h"
 #include "../../retroarch.h"
@@ -2843,6 +2846,9 @@ static bool d3d8_frame(void *data, const void *frame,
    const char *stat_text               = video_info->stat_text;
    bool statistics_show                = video_info->statistics_show;
    unsigned black_frame_insertion      = video_info->black_frame_insertion;
+#ifdef HAVE_GFX_WIDGETS
+   bool widgets_active                 = video_info->widgets_active;
+#endif
 #ifdef HAVE_MENU
    bool menu_is_alive                  = (video_info->menu_st_flags & MENU_ST_FLAG_ALIVE) ? true : false;
 #endif
@@ -2928,6 +2934,46 @@ static bool d3d8_frame(void *data, const void *frame,
       d3d8_set_mvp(d3d->dev, &d3d->mvp);
       for (i = 0; i < d3d->overlays_size; i++)
          d3d8_overlay_render(d3d, width, height, &d3d->overlays[i], true);
+   }
+#endif
+
+#ifdef HAVE_GFX_WIDGETS
+   /* Widget overlay (notifications, FPS counter, fast-forward
+    * indicator, achievement popups, load-progress bars, etc.).
+    *
+    * Widgets are drawn in screen-space using the same gfx_display
+    * ctx the menu uses, so all the prep here mirrors the
+    * pre-menu_driver_frame setup above:
+    *   - reset menu_display.offset (gfx_display_d3d8_draw streams
+    *     vertices into a ring at this offset)
+    *   - bind the menu_display vertex buffer
+    *   - full-screen viewport (widgets are positioned in screen
+    *     pixels, not in the game viewport)
+    *   - alpha blend on so semi-transparent widget panels
+    *     composite over the framebuffer (overlay_render disables
+    *     alpha blending on the way out, so we re-enable it here)
+    *   - FVF reset defensively in case the overlay or renderchain
+    *     left a different format bound
+    *
+    * gfx_widgets_frame ultimately calls gfx_display_d3d8_draw and
+    * d3d8_font_render_line, both of which wrap their own
+    * BeginScene/EndScene around each DrawPrimitiveUP, so we
+    * deliberately don't add an outer scene-wrap here. */
+   if (widgets_active)
+   {
+      d3d->menu_display.offset = 0;
+      IDirect3DDevice8_SetStreamSource(d3d->dev,
+            0, d3d->menu_display.buffer, sizeof(Vertex));
+      IDirect3DDevice8_SetViewport(d3d->dev, (D3DVIEWPORT8*)&screen_vp);
+      IDirect3DDevice8_SetRenderState(d3d->dev,
+            D3DRS_SRCBLEND,         D3DBLEND_SRCALPHA);
+      IDirect3DDevice8_SetRenderState(d3d->dev,
+            D3DRS_DESTBLEND,        D3DBLEND_INVSRCALPHA);
+      IDirect3DDevice8_SetRenderState(d3d->dev,
+            D3DRS_ALPHABLENDENABLE, TRUE);
+      IDirect3DDevice8_SetVertexShader(d3d->dev,
+            D3DFVF_XYZ | D3DFVF_TEX1 | D3DFVF_DIFFUSE);
+      gfx_widgets_frame(video_info);
    }
 #endif
 
@@ -3216,12 +3262,16 @@ static bool d3d8_has_windowed(void *data) { return true; }
 #endif
 
 #ifdef HAVE_GFX_WIDGETS
-/* The gfx_widgets layer (notifications, achievement popups,
- * load-progress indicators, etc.) is built on top of the same
- * gfx_display_ctx that the menu uses, so once gfx_display is
- * implemented the widgets only need a non-NULL hook returning
- * true to be enabled.  d3d8 has the full gfx_display path now,
- * so widgets work transparently. */
+/* Required hook: gfx_widgets initialises only on backends that
+ * advertise support via this callback.  When it returns true RA
+ * routes things like the fast-forward indicator, FPS counter,
+ * achievement popups and load-progress bars to the widget layer
+ * (gfx_widgets_status_text + gfx_widgets_frame), bypassing the
+ * runloop-msg → font_driver_render_msg fallback that would
+ * otherwise fire for text-only notifications.  d3d8_frame calls
+ * gfx_widgets_frame each frame after the overlay block, so all
+ * the widget rendering (which goes through gfx_display_d3d8_draw
+ * + d3d8_font_render_line) is wired up. */
 static bool d3d8_gfx_widgets_enabled(void *data)
 {
    (void)data;
