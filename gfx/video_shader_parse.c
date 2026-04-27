@@ -16,6 +16,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #ifdef HAVE_CONFIG_H
 #include "../config.h"
@@ -779,14 +780,19 @@ static bool video_shader_parse_pass(config_file_t *conf,
    if (scale->type_x == RARCH_SCALE_ABSOLUTE)
    {
       int iattr          = 0;
+      float fattr        = 0.0f;
       if (config_get_int(conf, shader_var, &iattr))
          scale->abs_x    = iattr;
+      else if (config_get_float(conf, shader_var, &fattr))
+         scale->abs_x    = (unsigned)roundf(fattr);
       else
       {
          _len = strlcpy(shader_var, "scale_x", sizeof(shader_var));
          strlcpy(shader_var + _len, formatted_num, sizeof(shader_var) - _len);
          if (config_get_int(conf, shader_var, &iattr))
             scale->abs_x = iattr;
+         else if (config_get_float(conf, shader_var, &fattr))
+            scale->abs_x = (unsigned)roundf(fattr);
       }
    }
    else
@@ -809,14 +815,19 @@ static bool video_shader_parse_pass(config_file_t *conf,
    if (scale->type_y == RARCH_SCALE_ABSOLUTE)
    {
       int iattr          = 0;
+      float fattr        = 0.0f;
       if (config_get_int(conf, shader_var, &iattr))
          scale->abs_y    = iattr;
+      else if (config_get_float(conf, shader_var, &fattr))
+         scale->abs_y    = (unsigned)roundf(fattr);
       else
       {
          _len = strlcpy(shader_var, "scale_y", sizeof(shader_var));
          strlcpy(shader_var + _len, formatted_num, sizeof(shader_var) - _len);
          if (config_get_int(conf, shader_var, &iattr))
             scale->abs_y = iattr;
+         else if (config_get_float(conf, shader_var, &fattr))
+            scale->abs_y = (unsigned)roundf(fattr);
       }
    }
    else
