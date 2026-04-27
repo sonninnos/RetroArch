@@ -999,6 +999,17 @@ static void gl1_render_overlay(gl1_t *gl,
 {
    int i;
 
+   /* gl1 reuses video_width/height for the emulated core frame size
+    * (e.g. 256x224 for SNES, 320x240 default for the menu surface),
+    * not the window size. Fullscreen overlays must be drawn into the
+    * actual window viewport, so use screen_width/height instead.
+    * Fall back to the passed-in width/height if the context driver
+    * has not reported a screen size yet. */
+   if (gl->screen_width)
+      width  = gl->screen_width;
+   if (gl->screen_height)
+      height = gl->screen_height;
+
    glEnable(GL_BLEND);
 
    if (gl->flags & GL1_FLAG_OVERLAY_FULLSCREEN)
@@ -1009,15 +1020,45 @@ static void gl1_render_overlay(gl1_t *gl,
    gl->coords.color     = gl->overlay_color_coord;
    gl->coords.vertices  = 4 * gl->overlays;
 
+   /* Fixed-function pipeline draws need the projection set, the
+    * modelview reset to identity and the client arrays bound to the
+    * overlay coord buffers. Previously this function only assigned
+    * pointers to gl->coords (which is just a struct field, not GL
+    * state) and pushed PROJECTION without popping it — so glDrawArrays
+    * ran with whatever client array state happened to be active and
+    * nothing rendered. Match the pattern used in
+    * gfx_display_gl1_draw and gl1_raster_font_draw_vertices. */
    glMatrixMode(GL_PROJECTION);
    glPushMatrix();
+   glLoadMatrixf(gl->mvp_no_rot.data);
+
+   glMatrixMode(GL_MODELVIEW);
+   glPushMatrix();
    glLoadIdentity();
+
+   glEnable(GL_TEXTURE_2D);
+   glEnableClientState(GL_VERTEX_ARRAY);
+   glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+   glEnableClientState(GL_COLOR_ARRAY);
+
+   glVertexPointer(2, GL_FLOAT, 0, gl->overlay_vertex_coord);
+   glTexCoordPointer(2, GL_FLOAT, 0, gl->overlay_tex_coord);
+   glColorPointer(4, GL_FLOAT, 0, gl->overlay_color_coord);
 
    for (i = 0; i < (int)gl->overlays; i++)
    {
       glBindTexture(GL_TEXTURE_2D, gl->overlay_tex[i]);
       glDrawArrays(GL_TRIANGLE_STRIP, 4 * i, 4);
    }
+
+   glDisableClientState(GL_COLOR_ARRAY);
+   glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+   glDisableClientState(GL_VERTEX_ARRAY);
+
+   glMatrixMode(GL_MODELVIEW);
+   glPopMatrix();
+   glMatrixMode(GL_PROJECTION);
+   glPopMatrix();
 
    glDisable(GL_BLEND);
    gl->coords.vertex    = gl->vertex_ptr;
