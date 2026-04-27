@@ -2552,7 +2552,7 @@ MSG_HASH(
    )
 MSG_HASH(
    MENU_ENUM_SUBLABEL_VIDEO_SCANLINE_SYNC,
-   "Đồng bộ việc hiển thị video theo vị trí dòng quét. Giảm độ trễ nhưng làm tăng nguy cơ bị xé hình."
+   "Đồng bộ việc hiển thị video theo vị trí dòng quét. Giảm độ trễ nhưng tăng nguy cơ bị xé hình. Cần tắt VSync."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_FRAME_DELAY,

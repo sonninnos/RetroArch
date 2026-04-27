@@ -2532,7 +2532,7 @@ MSG_HASH(
    )
 MSG_HASH(
    MENU_ENUM_SUBLABEL_VIDEO_SCANLINE_SYNC,
-   "Sincroniza la presentación de la imagen con la posición de las líneas de barrido. Reduce la latencia a costa de aumentar las fragmentaciones en la imagen."
+   "Sincroniza la presentación de la imagen con la posición de las líneas de barrido. Reduce la latencia a costa de aumentar las fragmentaciones en la imagen. Es necesario desactivar la sincronía vertical (Vsync)."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_FRAME_DELAY,

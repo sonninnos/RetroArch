@@ -2524,7 +2524,7 @@ MSG_HASH(
    )
 MSG_HASH(
    MENU_ENUM_SUBLABEL_VIDEO_SCANLINE_SYNC,
-   "Synchronisation de la présentation vidéo à la position de la ligne de balayage. Réduit la latence au prix d'un risque plus élevé de saccades."
+   "Synchronisation de la présentation vidéo à la position de la ligne de balayage. Réduit la latence au prix d'un risque plus élevé de saccades. La synchronisation verticale (V-Sync) doit être désactivée."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_FRAME_DELAY,

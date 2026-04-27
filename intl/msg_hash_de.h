@@ -2448,7 +2448,7 @@ MSG_HASH(
    )
 MSG_HASH(
    MENU_ENUM_SUBLABEL_VIDEO_SCANLINE_SYNC,
-   "Die Videodarstellung wird mit der Scanline-Position synchronisiert. Dies verringert die Latenz, erhöht jedoch das Risiko von Tearing."
+   "Die Videodarstellung wird mit der Scanline-Position synchronisiert. Dies verringert die Latenz, erhöht jedoch das Risiko von Tearing. VSync muss deaktiviert sein."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_FRAME_DELAY,
