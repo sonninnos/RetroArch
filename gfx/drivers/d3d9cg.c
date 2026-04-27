@@ -2045,6 +2045,22 @@ error:
    free(listing_f);
    free(listing_v);
 
+   /* Drop any partially-created program objects so add_pass doesn't
+    * inherit half-loaded handles -- previously these leaked, and on
+    * cgD3D9LoadProgram failure pass->fprg was a valid Cg object
+    * (just not GPU-loaded) which the renderer would happily try to
+    * bind every frame. */
+   if (pass->fprg)
+   {
+      cgDestroyProgram((CGprogram)pass->fprg);
+      pass->fprg = NULL;
+   }
+   if (pass->vprg)
+   {
+      cgDestroyProgram((CGprogram)pass->vprg);
+      pass->vprg = NULL;
+   }
+
    return false;
 }
 
@@ -2697,17 +2713,27 @@ static bool d3d9_cg_renderchain_add_pass(void *data, const struct LinkInfo *info
    cg_renderchain_t *chain     = (cg_renderchain_t*)data;
    d3d9_cg_renderchain_t *_chain = &chain->chain;
 
+   /* Zero everything first so the bail-out path has a well-defined
+    * struct to clean up: load_program may leave vprg/fprg as NULL
+    * on failure (stack garbage otherwise), and the post-fail cleanup
+    * in renderchain_free / set_shader fallback walks these fields. */
+   memset(&pass, 0, sizeof(pass));
    pass.info                   = *info;
-   pass.last_width             = 0;
-   pass.last_height            = 0;
    pass.attrib_map             = (struct unsigned_vector_list*)
       unsigned_vector_list_new();
    pass.pool                   = D3DPOOL_DEFAULT;
 
-   d3d9_cg_load_program((cg_renderchain_t*)chain, &pass, info->pass->source.path, true);
+   /* Cg compile/link failure was previously swallowed here, leaving
+    * vprg/fprg NULL but the pass still appended to the chain.  The
+    * render path then bound NULL programs every frame -> black
+    * screen with no recovery short of restarting the driver.
+    * Bail now and let init_chain unwind. */
+   if (!d3d9_cg_load_program((cg_renderchain_t*)chain, &pass,
+            info->pass->source.path, true))
+      goto error;
 
    if (!d3d9_cg_renderchain_init_shader_fvf(_chain, &pass))
-      return false;
+      goto error;
 
    if (!SUCCEEDED(IDirect3DDevice9_CreateVertexBuffer(
                _chain->dev, 4 * sizeof(struct Vertex),
@@ -2717,7 +2743,7 @@ static bool d3d9_cg_renderchain_add_pass(void *data, const struct LinkInfo *info
       vertbuf = NULL;
 
    if (!vertbuf)
-      return false;
+      goto error;
 
    pass.vertex_buf = vertbuf;
 
@@ -2735,7 +2761,7 @@ static bool d3d9_cg_renderchain_add_pass(void *data, const struct LinkInfo *info
    }
 
    if (!tex)
-      return false;
+      goto error;
 
    pass.tex        = tex;
 
@@ -2747,6 +2773,25 @@ static bool d3d9_cg_renderchain_add_pass(void *data, const struct LinkInfo *info
    shader_pass_vector_list_append(_chain->passes, pass);
 
    return true;
+
+error:
+   /* Release whatever we managed to create before the failure point.
+    * pass is a stack local that's about to be discarded, so anything
+    * the chain doesn't take ownership of must be freed here. */
+   if (pass.vprg)
+      cgDestroyProgram((CGprogram)pass.vprg);
+   if (pass.fprg)
+      cgDestroyProgram((CGprogram)pass.fprg);
+   if (pass.vertex_decl)
+      IDirect3DVertexDeclaration9_Release(
+            (LPDIRECT3DVERTEXDECLARATION9)pass.vertex_decl);
+   if (vertbuf)
+      IDirect3DVertexBuffer9_Release(vertbuf);
+   if (tex)
+      IDirect3DTexture9_Release(tex);
+   if (pass.attrib_map)
+      free(pass.attrib_map);
+   return false;
 }
 
 static void d3d9_cg_renderchain_calc_and_set_shader_mvp(
@@ -3793,7 +3838,25 @@ static bool d3d9_cg_set_shader(void *data,
 
    if (!d3d9_cg_process_shader(d3d) || !d3d9_cg_restore(d3d))
    {
-      RARCH_ERR("[D3D9 Cg] Failed to set shader.\n");
+      /* The new preset failed to compile/link, and restore() left
+       * d3d->renderchain_data pointing at a half-built chain whose
+       * passes have NULL vprg/fprg.  Rendering through that chain
+       * produces a black screen with no recovery path.
+       *
+       * Drop the bad preset and rebuild the chain against the stock
+       * shader so the user lands back in a working state.  Returning
+       * false tells the caller their requested preset didn't take. */
+      RARCH_ERR("[D3D9 Cg] Failed to set shader, falling back to stock.\n");
+
+      if (d3d->shader_path)
+      {
+         free(d3d->shader_path);
+         d3d->shader_path = NULL;
+      }
+
+      if (!d3d9_cg_process_shader(d3d) || !d3d9_cg_restore(d3d))
+         RARCH_ERR("[D3D9 Cg] Stock-shader fallback also failed.\n");
+
       return false;
    }
 
@@ -3883,6 +3946,24 @@ static bool d3d9_cg_init_internal(d3d9_video_t *d3d,
 #endif
 
    d3d->video_info = *info;
+
+   /* Populate d3d->shader with stock-shader defaults (or parse a
+    * preset if d3d->shader_path is set) BEFORE the renderchain
+    * is built.  d3d9_cg_initialize -> d3d9_cg_init_chain reads
+    * d3d->shader.pass[0].fbo to size the final pass; on the first
+    * init the d3d_video_t was just calloc'd, so without this call
+    * fbo.type_x/y are RARCH_SCALE_INPUT (=0) with scale=0.0f, and
+    * the renderchain ends up emitting a zero-sized quad — no core
+    * frame on screen until something later forces a chain rebuild
+    * via d3d9_cg_set_shader (which does call process_shader).
+    *
+    * d3d9hlsl gets away without this because its vertex positions
+    * are constant [0,1], so out_width/out_height being zero just
+    * means a uselessly-positioned-but-still-on-screen quad.  The
+    * Cg renderchain uses pixel-space vertices (0..out_width,
+    * 0..out_height) and collapses to a point when those are zero. */
+   if (!d3d9_cg_process_shader(d3d))
+      return false;
 
    if (!d3d9_cg_initialize(d3d, &d3d->video_info))
       return false;
