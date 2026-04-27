@@ -157,6 +157,7 @@ static bool font_init_first(
       case FONT_DRIVER_RENDER_D3D8_API:
       {
          static const font_renderer_t *d3d8_font_backends[] = {
+            &d3d8_font,
             NULL
          };
          unsigned i;
