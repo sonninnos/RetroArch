@@ -825,7 +825,7 @@ static void d3d8_overlay_render(d3d8_video_t *d3d,
    struct video_viewport vp;
    unsigned i;
    Vertex vert[4];
-   enum D3DTEXTUREFILTERTYPE filter_type = D3DTEXF_LINEAR;
+   D3DTEXTUREFILTERTYPE filter_type        = D3DTEXF_LINEAR;
 
    if (!d3d || !overlay || !overlay->tex)
       return;
