@@ -215,8 +215,25 @@ static bool d3d8_initialize_symbols(enum gfx_ctx_api api)
       g_d3d8_dll            = dylib_load("d3d8.dll");
 
    if (!g_d3d8_dll)
+   {
+      /* On modern Windows the legacy D3D8 user-mode runtime is not
+       * installed by default (only d3d8thk.dll, the kernel thunk
+       * layer, ships with the OS). Tell the user explicitly --
+       * otherwise the only message they see is the generic
+       * "Cannot open video driver" from video_driver_init_internal. */
+      RARCH_ERR("[D3D8] Failed to load d3d8.dll: %s\n",
+            dylib_error() ? dylib_error() : "(no error reported)");
+      RARCH_ERR("[D3D8] The legacy DirectX 8 runtime is not present "
+            "on this system. Install it (e.g. via the legacy DirectX "
+            "End-User Runtimes from Microsoft) or pick a different "
+            "video driver.\n");
       return false;
-   D3DCreate                = (D3DCreate_t)dylib_proc(g_d3d8_dll, "Direct3DCreate8");
+   }
+   if (!(D3DCreate = (D3DCreate_t)dylib_proc(g_d3d8_dll, "Direct3DCreate8")))
+   {
+      RARCH_ERR("[D3D8] d3d8.dll does not export Direct3DCreate8: %s\n",
+            dylib_error() ? dylib_error() : "(no error reported)");
+   }
 #else
    D3DCreate                = Direct3DCreate8;
 #endif
