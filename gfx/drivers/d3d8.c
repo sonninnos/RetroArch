@@ -1406,20 +1406,34 @@ static void d3d8_font_render_line(
       return;
 
    /* Soft scissor for text.  The font path doesn't go through
-    * gfx_display_d3d8_draw, so apply the same skip-only check
-    * here.  ly is the baseline in top-down screen pixels;
-    * visible glyphs sit at and above ly (descenders may dip
-    * slightly below).  Conservative cull when the baseline is
-    * well below the scissor's bottom edge — that's the case
-    * which produces visible overflow into Ozone's footer.  We
-    * deliberately don't cull on the top side: line height isn't
-    * known here and the symmetric overflow (entries above the
-    * scissor) doesn't occur in practice. */
+    * gfx_display_d3d8_draw, so apply a similar skip-only check
+    * here.  ly is the baseline in top-down screen pixels.
+    * Visible glyphs sit at or above ly (the baseline is the
+    * bottom of the line for most glyphs; descenders dip slightly
+    * below).  We don't know the line height here, but two
+    * conservative whole-line culls catch the cases that actually
+    * overflow in practice:
+    *
+    *   - ly >= sy2: baseline at or below the scissor bottom edge
+    *     means the whole line (which is above the baseline) is
+    *     mostly below the scissor.  In Ozone that's the entry
+    *     that has just scrolled past the footer.
+    *   - ly < sy:   baseline above the scissor top edge means
+    *     the whole line is above sy — every visible glyph sits
+    *     above its own baseline, so above sy too.  In Ozone
+    *     that's the entry that has just scrolled past the
+    *     header.
+    *
+    * Edge-aligned lines (baseline ~ sy or ~ sy2) still render in
+    * full — partial overlap isn't culled.  Pixel-perfect glyph
+    * clipping would need per-glyph bounding-box checks; the
+    * whole-line cull is enough to stop the visible overflow into
+    * Ozone's header/footer regions. */
    if (d3d->menu_display.scissor_active)
    {
-      int sy2 = d3d->menu_display.scissor_y
-              + d3d->menu_display.scissor_h;
-      if (ly >= sy2)
+      int sy  = d3d->menu_display.scissor_y;
+      int sy2 = sy + d3d->menu_display.scissor_h;
+      if (ly >= sy2 || ly < sy)
          return;
    }
 
