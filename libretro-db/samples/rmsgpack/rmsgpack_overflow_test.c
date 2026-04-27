@@ -77,10 +77,12 @@ static int run_dom_read(const uint8_t *data, size_t len)
    if (rv == 0)
       rmsgpack_dom_value_free(&v);
    intfstream_close(fd);
-   /* intfstream_close intentionally does not free the
-    * intfstream_t struct itself (existing libretro-common
-    * convention).  This is a documented pre-existing leak;
-    * the test exits before it matters. */
+   /* intfstream_close closes the inner stream but does not free
+    * the intfstream_t struct (existing libretro-common
+    * convention -- see core_info.c, core_backup.c, cdfs.c which
+    * also free after close).  ASan flags this as a 48-byte leak
+    * if we don't free it ourselves. */
+   free(fd);
    return rv;
 }
 

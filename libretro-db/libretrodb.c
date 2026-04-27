@@ -184,8 +184,16 @@ clean:
 
 void libretrodb_close(libretrodb_t *db)
 {
+   /* intfstream_close closes the inner file but does not free
+    * the intfstream_t struct itself (existing libretro-common
+    * convention).  Match the cleanup pattern used by
+    * core_info.c / core_backup.c / cdfs.c / rpng_encode.c which
+    * also free the struct after closing. */
    if (db->fd)
+   {
       intfstream_close(db->fd);
+      free(db->fd);
+   }
    if (db->path && *db->path)
       free(db->path);
    db->path = NULL;
@@ -246,8 +254,28 @@ int libretrodb_open(const char *path, libretrodb_t *db, bool write)
    return 0;
 
 error:
+   /* Free the strdup'd path (assigned at line 209) on the error
+    * path: pre-this-commit it was leaked unconditionally on bad
+    * magic, bad metadata_offset, or any rmsgpack_dom_read_into
+    * failure.  Reachable on any malformed .rdb the user has, so
+    * the leak compounds across a directory scan.
+    *
+    * Also free the intfstream_t struct itself.  intfstream_close
+    * intentionally only closes the inner file (existing libretro-
+    * common convention -- see the trailing 'free(file)' calls in
+    * core_info.c, core_backup.c, cdfs.c, rpng_encode.c which
+    * compensate for this), but libretrodb_open didn't.  This was
+    * a 48-byte leak per failed open. */
+   if (db->path)
+   {
+      free(db->path);
+      db->path = NULL;
+   }
    if (fd)
+   {
       intfstream_close(fd);
+      free(fd);
+   }
    return -1;
 }
 
@@ -666,8 +694,13 @@ void libretrodb_cursor_close(libretrodb_cursor_t *cursor)
    if (!cursor)
       return;
 
+   /* See libretrodb_close: intfstream_close does not free the
+    * struct.  Match the convention. */
    if (cursor->fd)
+   {
       intfstream_close(cursor->fd);
+      free(cursor->fd);
+   }
 
    if (cursor->query)
       libretrodb_query_free(cursor->query);

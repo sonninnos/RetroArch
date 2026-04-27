@@ -33,6 +33,14 @@ jobs:
       - name: Build and run samples
         shell: bash
         working-directory: libretro-db/samples
+        env:
+          # Build samples under AddressSanitizer + UndefinedBehaviorSanitizer.
+          # Both libretro-db sample tests support this via the SANITIZER=
+          # convention also used in samples/tasks/http/Makefile.  ASan
+          # catches any reintroduced leak (intfstream_t in libretrodb_open
+          # / cursor_close, etc.) and any out-of-bounds memory access, so
+          # this is the regression-protective build for these tests.
+          MAKE_ARGS: "SANITIZER=address,undefined"
         run: |
           set -u
           set -o pipefail
@@ -42,6 +50,7 @@ jobs:
           # failure.  These are built AND executed.
           declare -a RUN_TARGETS=(
             rmsgpack_overflow_test
+            libretrodb_leak_test
           )
 
           # Per-binary run command (overrides ./<binary> if present).
@@ -86,7 +95,7 @@ jobs:
             fi
 
             # Build
-            if ! ( cd "$d" && make clean all ); then
+            if ! ( cd "$d" && make clean all $MAKE_ARGS ); then
               printf '\n::error title=Build failed::%s failed to build\n' "$rel"
               fails=$((fails+1))
               continue

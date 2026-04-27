@@ -1,16 +1,20 @@
-TARGET := rmsgpack_overflow_test
+TARGET := libretrodb_leak_test
 
 LIBRETRODB_DIR    := ../..
 LIBRETRO_COMM_DIR := ../../../libretro-common
 
 SOURCES := \
-	rmsgpack_overflow_test.c \
+	libretrodb_leak_test.c \
+	$(LIBRETRODB_DIR)/libretrodb.c \
 	$(LIBRETRODB_DIR)/rmsgpack.c \
 	$(LIBRETRODB_DIR)/rmsgpack_dom.c \
+	$(LIBRETRODB_DIR)/bintree.c \
+	$(LIBRETRODB_DIR)/query.c \
 	$(LIBRETRO_COMM_DIR)/streams/interface_stream.c \
 	$(LIBRETRO_COMM_DIR)/streams/file_stream.c \
 	$(LIBRETRO_COMM_DIR)/streams/memory_stream.c \
 	$(LIBRETRO_COMM_DIR)/compat/compat_strl.c \
+	$(LIBRETRO_COMM_DIR)/compat/compat_fnmatch.c \
 	$(LIBRETRO_COMM_DIR)/compat/fopen_utf8.c \
 	$(LIBRETRO_COMM_DIR)/encodings/encoding_utf.c \
 	$(LIBRETRO_COMM_DIR)/encodings/encoding_crc32.c \
@@ -29,7 +33,8 @@ LDFLAGS +=
 
 # Optional ASan/UBSan build: invoke as 'make SANITIZER=address' or
 # 'make SANITIZER=address,undefined'.  Matches the convention used
-# in samples/tasks/http/Makefile.
+# in samples/tasks/http/Makefile.  Required to actually catch leak
+# regressions; the default build is a smoke test only.
 ifneq ($(SANITIZER),)
    CFLAGS  := -fsanitize=$(SANITIZER) -fno-omit-frame-pointer $(CFLAGS)
    LDFLAGS := -fsanitize=$(SANITIZER) $(LDFLAGS)
