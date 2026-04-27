@@ -7508,7 +7508,8 @@ bool MainWindow::addDirectoryFilesToList(QProgressDialog *dialog,
                          * Don't just extend this to add all files
                          * in a ZIP, because we might hit something like
                          * MAME/FBA where only the archives themselves
-                         /* Only append inner file reference if filter inside archives is enabled */
+                         * Only append inner file reference if filter 
+                         * inside archives is enabled */
                         if (playlistDialog->filterInArchive())
                         {
                             pathArray = (QString(pathData)
