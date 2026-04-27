@@ -5796,7 +5796,34 @@ static bool d3d12_gfx_frame(
 
 #ifdef HAVE_GFX_WIDGETS
    if (widgets_active)
+   {
+      /* d3d12_render_overlay binds d3d12->overlays.vbo_view as
+       * the input vertex buffer and may set frame.viewport /
+       * frame.scissorRect (when the overlay isn't fullscreen).
+       * Restore the same sprite-pipeline state the OSD-msg
+       * block below uses, so widget draws land against the
+       * sprite vbo with a screen-space viewport.  Without this
+       * the widget state machine still runs and writes to
+       * sprites.vbo, but the GPU draws read from
+       * overlays.vbo_view → silent no-op on screen, which is
+       * the symptom users see when an overlay is active.
+       *
+       * The PSO has to be reset too even though
+       * d3d12_render_overlay also uses sprites.pipe_blend,
+       * because in HDR mode the OSD block selects
+       * pipe_blend_hdr and we want to match. */
+#ifdef HAVE_DXGI_HDR
+      if (   (d3d12->chain.current_rt_format == DXGI_FORMAT_R10G10B10A2_UNORM)
+          || (d3d12->chain.current_rt_format == DXGI_FORMAT_R16G16B16A16_FLOAT))
+         cmd->lpVtbl->SetPipelineState(cmd, d3d12->sprites.pipe_blend_hdr);
+      else
+#endif
+         cmd->lpVtbl->SetPipelineState(cmd, d3d12->sprites.pipe_blend);
+      cmd->lpVtbl->RSSetViewports(cmd, 1, &d3d12->chain.viewport);
+      cmd->lpVtbl->RSSetScissorRects(cmd, 1, &d3d12->chain.scissorRect);
+      cmd->lpVtbl->IASetVertexBuffers(cmd, 0, 1, &d3d12->sprites.vbo_view);
       gfx_widgets_frame(video_info);
+   }
 #endif
 
    if (msg && *msg)
