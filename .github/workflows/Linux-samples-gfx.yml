@@ -172,3 +172,36 @@ jobs:
           ASAN_OPTIONS=detect_leaks=1 timeout 60 \
              ./vulkan_mailbox_init_leak_test
           echo "[pass] vulkan_mailbox_init_leak_test"
+
+      - name: Build and run vulkan_ctx_double_free_test (ASan)
+        shell: bash
+        working-directory: samples/gfx/vulkan_ctx_double_free
+        run: |
+          set -eu
+          # Regression test for the double-free / use-after-free
+          # fix in the Vulkan context drivers' set_video_mode error
+          # paths: gfx/drivers_context/wayland_vk_ctx.c,
+          # w_vk_ctx.c, x_vk_ctx.c.  Pre-fix each set_video_mode
+          # called its own destroy()/destroy_resources()+free() on
+          # ctx_data before returning false; the caller in
+          # gfx/drivers/vulkan.c::vulkan_init then ran
+          # vulkan_free()->ctx_driver->destroy(ctx_data) on the
+          # already-freed pointer (UAF read of struct fields, then
+          # a second free of the same allocation).  Reachable from
+          # vulkan_surface_create() failure (missing extension /
+          # driver issue), Wayland's set_video_mode_common_*
+          # helpers failing, X11's XGetVisualInfo returning NULL,
+          # or win32_set_video_mode failing.  Cocoa (cocoa_vk_ctx)
+          # and Android (android_vk_ctx) already handle this
+          # correctly by returning false without freeing -- the
+          # fix makes Wayland/Win32/X11 match.  Build under
+          # AddressSanitizer so any reintroduction is caught at
+          # the bounds level (UAF + double-free both fire).  If
+          # any of the three context drivers amends the
+          # set_video_mode error path to once again destroy
+          # ctx_data, the verbatim copy in
+          # vulkan_ctx_double_free_test.c must follow.
+          make clean all SANITIZER=address
+          test -x vulkan_ctx_double_free_test
+          timeout 60 ./vulkan_ctx_double_free_test
+          echo "[pass] vulkan_ctx_double_free_test"
