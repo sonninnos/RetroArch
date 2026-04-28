@@ -300,6 +300,7 @@ static bool gfx_thumbnail_get_path(
                *path          = path_data->left_path;
                return true;
             }
+            break;
          case GFX_THUMBNAIL_ICON:
             if (*path_data->icon_path)
             {
@@ -1316,8 +1317,20 @@ void gfx_thumbnail_path_reset(gfx_thumbnail_path_data_t *path_data)
  * Note: Returned object must be free()d */
 gfx_thumbnail_path_data_t *gfx_thumbnail_path_init(void)
 {
+   /* Use calloc rather than malloc.  gfx_thumbnail_path_reset()
+    * resets the string buffers and the playlist_*_mode fields
+    * but does NOT touch playlist_index, leaving it as garbage
+    * from malloc until the first set_content_*() call.  Read
+    * sites in xmb (xmb_set_title) sample
+    * thumbnail_path_data->playlist_index before any setter has
+    * necessarily run, then pass it to playlist_get_index() --
+    * which is bounds-checked, so a garbage index just returns
+    * a stale pl_entry rather than crashing, but the code is
+    * latently UB and a future read site without the same defence
+    * would inherit a real bug.  Zero-init via calloc closes
+    * the window without churning path_reset's API. */
    gfx_thumbnail_path_data_t *path_data = (gfx_thumbnail_path_data_t*)
-      malloc(sizeof(*path_data));
+      calloc(1, sizeof(*path_data));
    if (!path_data)
       return NULL;
 
@@ -1915,6 +1928,7 @@ size_t gfx_thumbnail_get_content_dir(gfx_thumbnail_path_data_t *path_data,
    size_t _len;
    char *last_slash;
    char tmp_buf[NAME_MAX_LENGTH];
+   const char *dir_start;
    if (!path_data || !*path_data->content_path)
       return 0;
    if (!(last_slash = find_last_slash(path_data->content_path)))
@@ -1922,7 +1936,24 @@ size_t gfx_thumbnail_get_content_dir(gfx_thumbnail_path_data_t *path_data,
    _len = last_slash + 1 - path_data->content_path;
    if (!((_len > 1) && (_len < PATH_MAX_LENGTH)))
       return 0;
-   strlcpy(tmp_buf, path_data->content_path, _len * sizeof(char));
+   /* The historical implementation copied the whole directory
+    * portion of content_path into tmp_buf and then took its
+    * basename.  But content_path is sized PATH_MAX_LENGTH (2048)
+    * and tmp_buf only NAME_MAX_LENGTH (256), so a directory
+    * portion longer than 255 chars (reachable on systems with
+    * deep folder hierarchies) caused strlcpy to write up to
+    * _len-1 bytes into the 256-byte tmp_buf -- a stack overflow.
+    *
+    * Since the goal is the *basename* of the directory (i.e.
+    * the segment between the second-to-last and last slashes),
+    * skip the prefix copy: we only need the tail.  Anchor the
+    * copy at the latest position that still lets the segment
+    * fit in tmp_buf, then take its basename. */
+   dir_start = path_data->content_path;
+   if (_len > sizeof(tmp_buf))
+      dir_start = last_slash + 1 - sizeof(tmp_buf);
+   strlcpy(tmp_buf, dir_start,
+         (last_slash - dir_start + 1) * sizeof(char));
    return strlcpy(s, path_basename_nocompression(tmp_buf), len);
 }
 
@@ -1934,6 +1965,9 @@ void gfx_savestate_thumbnail_get_path(
 {
    size_t _len;
 
+   if (!s || !len)
+      return;
+
    s[0] = '\0';
 
    if (!state_name || !*state_name)
@@ -1941,10 +1975,39 @@ void gfx_savestate_thumbnail_get_path(
 
    _len = strlcpy(s, state_name, len);
 
+   /* The historical implementation accumulated _len from
+    * strlcpy / snprintf returns and used `len - _len` as the
+    * size for subsequent calls.  That pattern is NOT
+    * self-bounding: strlcpy returns strlen(@src), and snprintf
+    * returns the would-be length on truncation, so on any
+    * truncating call _len overshoots @len, the next len-_len
+    * subtraction underflows size_t to ~SIZE_MAX, and the
+    * subsequent strlcpy treats the destination as essentially
+    * infinite.  Reachable when state_name approaches PATH_MAX_LENGTH
+    * (e.g. content loaded from a deep directory tree, since
+    * runloop_st->name.savestate is sized PATH_MAX_LENGTH) and
+    * the slot suffix or extension push the total past @len.
+    *
+    * Clamp _len after each truncation so the chain stays inside
+    * the buffer instead of running off the end. */
+   if (_len >= len)
+      _len = len - 1;
+
    if (state_slot > 0)
-      _len += snprintf(s + _len, len - _len, "%d", state_slot);
+   {
+      int n = snprintf(s + _len, len - _len, "%d", state_slot);
+      if (n < 0)
+         return;
+      _len += (size_t)n;
+      if (_len >= len)
+         _len = len - 1;
+   }
    else if (state_slot < 0)
-      _len  = fill_pathname_join_delim(s, state_name, "auto", '.', len);
+   {
+      _len = fill_pathname_join_delim(s, state_name, "auto", '.', len);
+      if (_len >= len)
+         _len = len - 1;
+   }
 
    strlcpy(s + _len, FILE_PATH_PNG_EXTENSION, len - _len);
 }
