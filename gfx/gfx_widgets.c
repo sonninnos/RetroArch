@@ -1278,6 +1278,13 @@ static void gfx_widgets_draw_task_msg(
          texture    = MENU_WIDGETS_ICON_HOURGLASS;
          color      = msg_queue_bar;
          radians    = msg->hourglass_rotation;
+         /* The display drivers that consume this rotation via the
+          * cosine/sine pair (gl, gl1, glcore, vulkan) need the
+          * trig values recomputed to match the live rotation -
+          * leaving them at the zero-rotation defaults above pins
+          * the hourglass icon to its starting orientation. */
+         cosine     = cosf(radians);
+         sine       = sinf(radians);
       }
       else if (msg->flags & DISPWIDG_FLAG_POSITIVE)
       {
