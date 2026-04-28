@@ -6790,28 +6790,43 @@ static unsigned menu_displaylist_populate_subsystem(
          {
             if (content_get_subsystem_rom_id() < subsystem->num_roms)
             {
+               /* Bound-checked piece-by-piece append.  Pre-fix this
+                * was a naive `_len += strlcpy(s + _len, src,
+                * sizeof(s) - _len)` chain that overshoots and
+                * underflows on a long subsystem->desc -- core-
+                * controlled via RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO
+                * with no length limit imposed by RetroArch -- driving
+                * the next strlcpy into an OOB write on the stack
+                * buffer s[PATH_MAX_LENGTH].  See 78c52ab for the
+                * helper rationale and the database_info_build_
+                * query_enum precedent. */
+               size_t pos = 0;
+               int    rv  = 0;
                /* TODO/FIXME - Localize string */
-               size_t _len = strlcpy(s, "Load", sizeof(s));
-               _len       += strlcpy(s + _len, " ", sizeof(s) - _len);
-               _len       += strlcpy(s + _len, subsystem->desc, sizeof(s) - _len);
-               _len       += strlcpy(s + _len, " ", sizeof(s) - _len);
-               _len       += strlcpy(s + _len, star_char, sizeof(s) - _len);
+               rv |= strlcpy_append(s, sizeof(s), &pos, "Load");
+               rv |= strlcpy_append(s, sizeof(s), &pos, " ");
+               rv |= strlcpy_append(s, sizeof(s), &pos, subsystem->desc);
+               rv |= strlcpy_append(s, sizeof(s), &pos, " ");
+               rv |= strlcpy_append(s, sizeof(s), &pos, star_char);
 
 #ifdef HAVE_RGUI
                /* If using RGUI with sublabels disabled, add the
                 * appropriate text to the menu entry itself... */
                if (is_rgui && !menu_show_sublabels)
                {
-                  _len       += strlcpy(s + _len, " [", sizeof(s) - _len);
+                  rv |= strlcpy_append(s, sizeof(s), &pos, " [");
                   /* TODO/FIXME - Localize */
-                  _len       += strlcpy(s + _len, "Current Content:", sizeof(s) - _len);
-                  _len       += strlcpy(s + _len, " ", sizeof(s) - _len);
-                  _len       += strlcpy(s + _len,
-                        subsystem->roms[content_get_subsystem_rom_id()].desc,
-                        sizeof(s)         - _len);
-                  strlcpy(s + _len, "]", sizeof(s) - _len);
+                  rv |= strlcpy_append(s, sizeof(s), &pos,
+                        "Current Content:");
+                  rv |= strlcpy_append(s, sizeof(s), &pos, " ");
+                  rv |= strlcpy_append(s, sizeof(s), &pos,
+                        subsystem->roms[content_get_subsystem_rom_id()].desc);
+                  rv |= strlcpy_append(s, sizeof(s), &pos, "]");
                }
 #endif
+               (void)rv;  /* truncation leaves s NUL-terminated at
+                           * sizeof(s) - 1; the menu entry is just
+                           * shorter than ideal, no further action. */
 
                if (menu_entries_append(list,
                   s,
@@ -6822,39 +6837,48 @@ static unsigned menu_displaylist_populate_subsystem(
             }
             else
             {
+               /* Same chain pattern as the "Load" branch above; same
+                * unbounded subsystem->desc surface. */
+               size_t pos = 0;
+               int    rv  = 0;
                /* TODO/FIXME - Localize string */
-               size_t _len = strlcpy(s, "Start", sizeof(s));
-               _len       += strlcpy(s + _len, " ", sizeof(s) - _len);
-               _len       += strlcpy(s + _len, subsystem->desc, sizeof(s) - _len);
-               _len       += strlcpy(s + _len, " ", sizeof(s) - _len);
-               _len       += strlcpy(s + _len, star_char,       sizeof(s) - _len);
+               rv |= strlcpy_append(s, sizeof(s), &pos, "Start");
+               rv |= strlcpy_append(s, sizeof(s), &pos, " ");
+               rv |= strlcpy_append(s, sizeof(s), &pos, subsystem->desc);
+               rv |= strlcpy_append(s, sizeof(s), &pos, " ");
+               rv |= strlcpy_append(s, sizeof(s), &pos, star_char);
 
 #ifdef HAVE_RGUI
                /* If using RGUI with sublabels disabled, add the
                 * appropriate text to the menu entry itself... */
                if (is_rgui && !menu_show_sublabels)
                {
-                  size_t _len2 = 0;
+                  size_t pos2  = 0;
+                  int    rv2   = 0;
                   unsigned j   = 0;
                   char rom_buff[PATH_MAX_LENGTH];
+                  rom_buff[0]  = '\0';
 
                   for (j = 0; j < content_get_subsystem_rom_id(); j++)
                   {
-                     _len2    += strlcpy(rom_buff + _len2,
-                           path_basename(content_get_subsystem_rom(j)),
-                                 sizeof(rom_buff) - _len2);
+                     rv2 |= strlcpy_append(rom_buff, sizeof(rom_buff),
+                           &pos2,
+                           path_basename(content_get_subsystem_rom(j)));
                      if (j != content_get_subsystem_rom_id() - 1)
-                        _len2 += strlcpy(rom_buff + _len2, "|", sizeof(rom_buff) - _len2);
+                        rv2 |= strlcpy_append(rom_buff, sizeof(rom_buff),
+                              &pos2, "|");
                   }
+                  (void)rv2;
 
                   if (*rom_buff)
                   {
-                     _len += strlcpy(s + _len, " [",     sizeof(s) - _len);
-                     _len += strlcpy(s + _len, rom_buff, sizeof(s) - _len);
-                     strlcpy(s + _len, "]", sizeof(s) - _len);
+                     rv |= strlcpy_append(s, sizeof(s), &pos, " [");
+                     rv |= strlcpy_append(s, sizeof(s), &pos, rom_buff);
+                     rv |= strlcpy_append(s, sizeof(s), &pos, "]");
                   }
                }
 #endif
+               (void)rv;
 
                if (menu_entries_append(list,
                   s,
@@ -6866,10 +6890,13 @@ static unsigned menu_displaylist_populate_subsystem(
          }
          else
          {
+            /* Same chain pattern as the two branches above. */
+            size_t pos = 0;
+            int    rv  = 0;
             /* TODO/FIXME - Localize */
-            size_t _len = strlcpy(s, "Load", sizeof(s));
-            _len       += strlcpy(s + _len, " ", sizeof(s) - _len);
-            _len       += strlcpy(s + _len, subsystem->desc, sizeof(s) - _len);
+            rv |= strlcpy_append(s, sizeof(s), &pos, "Load");
+            rv |= strlcpy_append(s, sizeof(s), &pos, " ");
+            rv |= strlcpy_append(s, sizeof(s), &pos, subsystem->desc);
 
 #ifdef HAVE_RGUI
             /* If using RGUI with sublabels disabled, add the
@@ -6881,16 +6908,18 @@ static unsigned menu_displaylist_populate_subsystem(
                 * anyway), but no harm in being safe... */
                if (subsystem->num_roms > 0)
                {
-                  _len += strlcpy(s + _len, " [",               sizeof(s) - _len);
+                  rv |= strlcpy_append(s, sizeof(s), &pos, " [");
                   /* TODO/FIXME - Localize */
-                  _len += strlcpy(s + _len, "Current Content:", sizeof(s) - _len);
-                  _len += strlcpy(s + _len, " ",                sizeof(s) - _len);
-                  _len += strlcpy(s + _len, subsystem->roms[0].desc,
-                                                                sizeof(s) - _len);
-                  strlcpy(s + _len, "]", sizeof(s) - _len);
+                  rv |= strlcpy_append(s, sizeof(s), &pos,
+                        "Current Content:");
+                  rv |= strlcpy_append(s, sizeof(s), &pos, " ");
+                  rv |= strlcpy_append(s, sizeof(s), &pos,
+                        subsystem->roms[0].desc);
+                  rv |= strlcpy_append(s, sizeof(s), &pos, "]");
                }
             }
 #endif
+            (void)rv;
 
             if (menu_entries_append(list,
                s,
