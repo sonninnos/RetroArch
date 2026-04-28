@@ -243,7 +243,12 @@ static bool task_http_finder(retro_task_t *task, void *user_data)
    return false;
 }
 
-static void http_transfer_progress_cb(retro_task_t *task)
+/* Forward task progress to the platform's window/taskbar progress
+ * indicator (e.g. ITaskbarList3 on Win32). Exposed via tasks_internal.h
+ * so non-HTTP tasks (such as the Core Updater's outer aggregating tasks)
+ * can wire it as their progress_cb and have the desktop reflect their
+ * progress, the same way titled HTTP transfers already do. */
+void task_window_progress_cb(retro_task_t *task)
 {
 #ifdef RARCH_INTERNAL
    if (task)
@@ -312,7 +317,7 @@ static void *task_push_http_transfer_generic_titled(
    t->handler              = task_http_transfer_handler;
    t->state                = http;
    t->callback             = cb;
-   t->progress_cb          = http_transfer_progress_cb;
+   t->progress_cb          = task_window_progress_cb;
    t->cleanup              = task_http_transfer_cleanup;
    t->user_data            = user_data;
    t->progress             = -1;

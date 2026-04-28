@@ -61,6 +61,14 @@ typedef struct
    int status;
 } http_transfer_data_t;
 
+/* Generic progress_cb that forwards a task's progress (0-100) to the
+ * platform's window/taskbar progress indicator. Set this on any task
+ * whose progress should be reflected on the taskbar -- aggregating
+ * tasks (e.g. the Core Updater's outer task) need to do this manually
+ * because their inner http transfers run muted and so their own
+ * progress callbacks never fire. */
+void task_window_progress_cb(retro_task_t *task);
+
 void *task_push_http_transfer(const char *url, bool mute, const char *type,
       retro_task_callback_t cb, void *userdata);
 
