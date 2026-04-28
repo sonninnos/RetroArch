@@ -85,7 +85,7 @@ jobs:
           test -x retroarch
           file retroarch
 
-      - name: Smoke run --help (ASan strict, UBSan soft-fail)
+      - name: Smoke run --help (ASan + UBSan strict)
         # `--help` exits cleanly via exit(0) after printing the usage
         # banner.  Coverage scope: libc init, main(), frontend
         # driver bootstrap, argv duplication, the getopt walk over
@@ -93,13 +93,17 @@ jobs:
         # Doesn't reach into core loading / video init / cleanup-on-
         # shutdown -- a follow-up step running with --max-frames=N
         # against a noop core will extend coverage to the full
-        # lifecycle.  ASan runs in abort-on-error mode so any heap
-        # corruption fails the job; UBSan reports stacktraces but
-        # does not fail (first iteration -- we want to see the
-        # baseline before deciding which UBSan classes to enforce).
+        # lifecycle.  ASan and UBSan both run in halt-on-error mode:
+        # the first run of this workflow (Apr 28 2026, run #1)
+        # reported zero distinct UBSan diagnostics across both
+        # smoke invocations, so the baseline for these two surfaces
+        # is clean and we enforce it.  If a future change introduces
+        # signed-overflow / alignment / shift-too-large UB along
+        # the option-parsing or print paths, this step will fail
+        # and the diagnostic line will be in the captured stderr.
         env:
           ASAN_OPTIONS: abort_on_error=1:detect_leaks=0:print_stacktrace=1:strict_string_checks=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
           # Avoid noise from libGL / Mesa / Wayland symbol-resolution
           # leaks at process shutdown; those are not RetroArch bugs.
           LSAN_OPTIONS: exitcode=0
@@ -113,14 +117,21 @@ jobs:
           cat /tmp/help.err
           # ASan abort_on_error sends the process to exit code 1 + a
           # SUMMARY: line on stderr.  Treat any "AddressSanitizer:"
-          # marker as fatal regardless of exit code.
+          # or UBSan "runtime error:" marker as fatal regardless of
+          # exit code -- belt-and-suspenders to the runtime options
+          # in case a future sanitizer release changes its default
+          # exit semantics.
           if grep -q "AddressSanitizer:" /tmp/help.err; then
             echo "[FAIL] AddressSanitizer reported a finding"
             exit 1
           fi
+          if grep -q "runtime error:" /tmp/help.err; then
+            echo "[FAIL] UBSan reported a finding"
+            exit 1
+          fi
           echo "[pass] retroarch --help under ASan+UBSan"
 
-      - name: Smoke run --features (ASan strict, UBSan soft-fail)
+      - name: Smoke run --features (ASan + UBSan strict)
         # `--features` exits cleanly via exit(0) after printing the
         # compile-time feature list.  Coverage scope is the same as
         # --help (libc init / main / frontend bootstrap / arg parse)
@@ -130,10 +141,11 @@ jobs:
         # such walk reads pointers into a static-string table -- low
         # corruption surface but a useful sanity check that the link-
         # time feature flags resolve consistently.  Doesn't reach
-        # core loading or cleanup-on-shutdown.
+        # core loading or cleanup-on-shutdown.  Like the --help step
+        # this enforces UBSan strict because the baseline is clean.
         env:
           ASAN_OPTIONS: abort_on_error=1:detect_leaks=0:print_stacktrace=1:strict_string_checks=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
           LSAN_OPTIONS: exitcode=0
         run: |
           set -eu
@@ -147,24 +159,8 @@ jobs:
             echo "[FAIL] AddressSanitizer reported a finding"
             exit 1
           fi
-          echo "[pass] retroarch --features under ASan+UBSan"
-
-      - name: Summarize UBSan baseline
-        # Both runtime steps are non-fatal on UBSan diagnostics.  This
-        # step prints a count of distinct UBSan messages observed so
-        # follow-up patches have a numerical target to drive to zero.
-        # If this step ever shows zero, flip
-        # UBSAN_OPTIONS=halt_on_error=1 in the runtime steps above to
-        # enforce the clean baseline.
-        if: always()
-        run: |
-          set +e
-          ub_count=$( {
-            grep -h "runtime error:" /tmp/help.err /tmp/features.err 2>/dev/null
-          } | sort -u | wc -l)
-          echo "UBSan distinct diagnostics: ${ub_count}"
-          if [ "${ub_count}" != "0" ]; then
-            echo "=== unique UBSan diagnostics ==="
-            grep -h "runtime error:" /tmp/help.err /tmp/features.err 2>/dev/null \
-              | sort -u
+          if grep -q "runtime error:" /tmp/features.err; then
+            echo "[FAIL] UBSan reported a finding"
+            exit 1
           fi
+          echo "[pass] retroarch --features under ASan+UBSan"
