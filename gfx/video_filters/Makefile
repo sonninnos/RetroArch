@@ -105,6 +105,7 @@ asflags += -mfpu=neon
 endif
 
 objects += blargg_ntsc_snes.$(DYLIB) \
+			  dedither.$(DYLIB) \
 			  phosphor2x.$(DYLIB) \
 			  epx.$(DYLIB) \
 			  lq2x.$(DYLIB) \
@@ -118,6 +119,7 @@ objects += blargg_ntsc_snes.$(DYLIB) \
 			  normal2x_width.$(DYLIB) \
 			  normal2x_height.$(DYLIB) \
 			  normal4x.$(DYLIB) \
+			  pixel_art_aa.$(DYLIB) \
 			  scanline2x.$(DYLIB) \
 			  grid2x.$(DYLIB) \
 			  grid3x.$(DYLIB) \

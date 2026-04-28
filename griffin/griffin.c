@@ -1004,6 +1004,8 @@ FILTERS
 ============================================================ */
 #ifdef HAVE_FILTERS_BUILTIN
 #ifdef HAVE_VIDEO_FILTER
+#include "../gfx/video_filters/dedither.c"
+#include "../gfx/video_filters/pixel_art_aa.c"
 #include "../gfx/video_filters/2xsai.c"
 #include "../gfx/video_filters/super2xsai.c"
 #include "../gfx/video_filters/supereagle.c"
