@@ -9,15 +9,15 @@ name: CI Linux ASan + UBSan [No Menu]
 #      argv duplication, the getopt walk, and the print functions.
 #      Strict ASan + UBSan -- baseline confirmed clean (run #1).
 #
-#   2. Headless imageviewer core under Xvfb + xvideo video driver +
+#   2. Headless imageviewer core under Xvfb + sdl2 video driver +
 #      null audio driver, --max-frames=300 for a clean shutdown
 #      through the normal runloop teardown.  Exercises core loading
 #      via dlopen, the imageviewer's stb_image-driven loader, the
-#      X11 + XVideo color-conversion pipeline, the runloop, and
+#      SDL2 + X11 + MIT-SHM rendering pipeline, the runloop, and
 #      cleanup-on-shutdown.  Soft-fail (continue-on-error) on this
-#      first iteration: lots can go wrong (Xvfb quirks, libGL leaks,
-#      driver init noise) that aren't RetroArch bugs but would fail
-#      the run if treated strictly.  Sanitizer findings are still
+#      first iteration: lots can go wrong (libGL leaks, driver
+#      init noise) that aren't RetroArch bugs but would fail the
+#      run if treated strictly.  Sanitizer findings are still
 #      surfaced in step output for triage.
 #
 # The per-sample tests under .github/workflows/Linux-samples-gfx.yml,
@@ -61,19 +61,16 @@ jobs:
         # known-good headless configuration.  Adds:
         #   xvfb / x11-utils  -- virtual X server for the imageviewer
         #                        smoke step + xdpyinfo for diagnostics
-        #   libxv-dev         -- XVideo extension headers, for the
-        #                        xvideo video driver
-        #   libxext-dev / libxxf86vm-dev -- transitive X11 deps that
-        #                        configure's xvideo check requires
-        # No sanitizer-specific packages required; libasan / libubsan
-        # ship with the gcc that ubuntu-latest has installed by
-        # default.
+        # libsdl2-dev (already in the base set) provides the SDL2
+        # video driver used by that smoke -- see the smoke step's
+        # comment for why SDL2 over xvideo.  No sanitizer-specific
+        # packages required; libasan / libubsan ship with the gcc
+        # that ubuntu-latest has installed by default.
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
             build-essential \
             libxkbcommon-dev libx11-xcb-dev \
-            libxv-dev libxext-dev libxxf86vm-dev \
             xvfb x11-utils \
             zlib1g-dev libfreetype6-dev \
             libegl1-mesa-dev libgles2-mesa-dev libgbm-dev \
@@ -84,13 +81,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Configure (no menu, no discord/cheevos/networking, xvideo on)
+      - name: Configure (no menu, no discord/cheevos/networking, sdl2 on)
         # Trim the build surface for the first iteration so any
         # sanitizer hit is a RetroArch-internal bug rather than noise
         # from a vendored third-party subsystem.  The disabled
         # subsystems will be re-enabled in follow-up patches as the
-        # baseline stays green.  --enable-xvideo is explicit because
-        # the imageviewer smoke step below selects xvideo as the video
+        # baseline stays green.  --enable-sdl2 is explicit because
+        # the imageviewer smoke step below selects sdl2 as the video
         # driver; if its build deps were ever missing, a silent fall-
         # back to a different driver would skew the smoke's coverage
         # without warning.
@@ -100,7 +97,7 @@ jobs:
             --disable-discord \
             --disable-cheevos \
             --disable-networking \
-            --enable-xvideo
+            --enable-sdl2
 
       - name: Build with -fsanitize=address,undefined
         # The top-level Makefile (line 153) propagates SANITIZER into
@@ -244,27 +241,43 @@ jobs:
         # ~15-25s under sanitizer overhead), then exits via the
         # normal runloop teardown path.  Covers what the --help and
         # --features smokes can't: dlopen of a libretro core,
-        # retro_load_game, the stb_image decode path, the X11 +
-        # XVideo color-conversion + shared-memory image-transfer
-        # pipeline, the runloop, and full cleanup-on-shutdown.
+        # retro_load_game, the stb_image decode path, the SDL2 +
+        # X11 + MIT-SHM rendering pipeline, the runloop, and full
+        # cleanup-on-shutdown.
         #
-        # Soft-fail (continue-on-error: true) on this first
-        # iteration.  Reasoning: lots can go wrong here that aren't
-        # RetroArch bugs -- Xvfb quirks, libGL / Mesa software-
-        # rasterizer leaks at shutdown, X11 driver init noise --
-        # and forcing the workflow to enforce strict cleanliness
-        # before we've measured the baseline would block merges on
-        # noise.  Sanitizer findings ARE still surfaced in the step
-        # output for triage; they just don't fail the job.  Once
-        # the baseline is characterised the same way the --help
-        # step's was, this step can be flipped to strict.
+        # Why sdl2 specifically: the v10 first attempt selected
+        # xvideo (smaller, more self-contained, real YUV color
+        # tables).  Run #1 of that workflow tripped on Xvfb
+        # exposing the XVideo extension but providing zero
+        # adaptors:
+        #
+        #   [XVideo] XvQueryAdaptors() found 0 adaptors.
+        #   [Video] Cannot open video driver. Exiting...
+        #
+        # That's correct defensive code in the xvideo driver, not
+        # a bug -- but it means xvideo can't be exercised on Xvfb
+        # without real video hardware, which the runner doesn't
+        # have.  SDL2 over X11 / MIT-SHM works on Xvfb out of the
+        # box (verified via a standalone SDL_CreateRenderer probe
+        # before this patch landed).  Coverage tradeoff: we lose
+        # xvideo's YUV color-conversion path but keep all the
+        # high-leverage surface (dlopen, core lifecycle, stb_image,
+        # runloop, video driver init, full cleanup).
+        #
+        # Soft-fail (continue-on-error: true) on this iteration.
+        # Reasoning: lots can go wrong here that aren't RetroArch
+        # bugs -- libGL / Mesa software-rasterizer leaks at
+        # shutdown, X11 driver init noise -- and forcing strict
+        # cleanliness before measuring the baseline would block
+        # merges on noise.  Sanitizer findings ARE still surfaced
+        # in the step output for triage; they just don't fail
+        # the job.  Once the baseline is characterised, this step
+        # can be flipped to strict the same way the --help step
+        # was in v8.
         #
         # Audio driver is "null" (no PulseAudio / ALSA dependency
-        # on the runner).  Video driver is "xvideo" because Xvfb
-        # exposes the XVideo extension and that's the smallest /
-        # most self-contained X11 driver in the tree (1163 LOC,
-        # adapted from bSNES/MPlayer, no GL dependency).  Verbose
-        # output is on so the run captures the full log for triage.
+        # on the runner).  Verbose output is on so the run captures
+        # the full log for triage.
         continue-on-error: true
         env:
           # detect_leaks=0 because libGL / Mesa symbol-resolution
@@ -285,33 +298,32 @@ jobs:
 
           # Start Xvfb on display :99.  -screen geometry is small
           # because the imageviewer doesn't care about resolution
-          # and we're trying to minimise X server memory.  +extension
-          # GLX is implicit in modern Xvfb; XVideo is exposed by
-          # default.
+          # and we're trying to minimise X server memory.  SDL2's
+          # X11 backend uses MIT-SHM (which Xvfb provides by
+          # default) for image transfer.
           Xvfb :99 -screen 0 320x240x24 -nolisten tcp &
           XVFB_PID=$!
           # Ensure cleanup on any exit (including soft-fail ones).
           trap "kill $XVFB_PID 2>/dev/null || true" EXIT
-          # Give Xvfb time to come up; xdpyinfo also confirms
-          # XVideo is available before we waste cycles trying to
-          # use it.  xdpyinfo prints extension names indented with
-          # leading whitespace, hence the ^[[:space:]]* in the
-          # regex.
+          # Give Xvfb time to come up; xdpyinfo confirms MIT-SHM is
+          # available before we waste cycles trying to use it.
+          # Extension names in xdpyinfo output are indented with
+          # leading whitespace, hence ^[[:space:]]+.
           for i in 1 2 3 4 5; do
             if DISPLAY=:99 xdpyinfo -queryExtensions 2>/dev/null \
-                 | grep -qE "^[[:space:]]+XVideo\b"; then
+                 | grep -qE "^[[:space:]]+MIT-SHM\b"; then
               break
             fi
             sleep 1
           done
           DISPLAY=:99 xdpyinfo -queryExtensions \
-            | grep -E "^[[:space:]]+(XVideo|MIT-SHM)\b" || true
+            | grep -E "^[[:space:]]+MIT-SHM\b" || true
 
-          # Minimal config: xvideo video, null audio, one frame of
-          # logging detail.  Everything else takes built-in defaults.
+          # Minimal config: sdl2 video, null audio.  Everything
+          # else takes built-in defaults.
           mkdir -p /tmp/asan-cfg
           cat > /tmp/asan-cfg/retroarch.cfg <<EOF
-          video_driver = "xvideo"
+          video_driver = "sdl2"
           audio_driver = "null"
           video_threaded = "false"
           video_fullscreen = "false"
