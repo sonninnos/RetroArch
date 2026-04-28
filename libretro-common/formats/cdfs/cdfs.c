@@ -431,11 +431,13 @@ static cdfs_track_t* cdfs_open_cue_track(
    if (!cue_contents)
    {
       intfstream_close(cue_stream);
+      free(cue_stream);
       return NULL;
    }
 
    intfstream_read(cue_stream, cue_contents, stream_size);
    intfstream_close(cue_stream);
+   free(cue_stream);
 
    cue_contents[stream_size] = '\0';
 

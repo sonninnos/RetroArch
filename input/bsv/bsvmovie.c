@@ -1313,6 +1313,7 @@ bool replay_check_same_timeline(bsv_movie_t *movie,
    free(buf1);
    free(buf2);
    intfstream_close(check_stream);
+   free(check_stream);
    intfstream_seek(movie->file, movie_pos, SEEK_SET);
    return ret;
 }
@@ -1641,6 +1642,7 @@ int64_t bsv_movie_write_deduped_state(bsv_movie_t *movie, uint8_t *state,
    RARCH_DBG("[STATESTREAM] Encode stats at checkpoint %d: %d blocks (%d reused, %d skipped [%d checks], %d distinct [%d hashes])\n", total_checkpoints, total_blocks, reused_blocks, skipped_blocks, memcmps, uint32s_index_count(movie->blocks), hashes);
    RARCH_DBG("[STATESTREAM] %d superblocks (%d reused, %d distinct); unencoded size (KB) %d, encoded size (KB) %d; net time (secs) %f\n", total_superblocks, reused_superblocks, uint32s_index_count(movie->superblocks), total_kbs_input, total_kbs_written, ((float)total_encode_micros) / (float)1000000.0);
    intfstream_close(out_stream);
+   free(out_stream);
    return encoded_size;
 }
 
@@ -1843,6 +1845,7 @@ exit:
    /* uint32s_index_commit(movie->superblocks); */
    rmsgpack_dom_reader_state_free(reader_state);
    intfstream_close(read_mem);
+   free(read_mem);
    if (!ret)
    {
       RARCH_ERR("[STATESTREAM] made it to end without superblock seq\n");
