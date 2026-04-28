@@ -107,3 +107,35 @@ jobs:
           test -x vulkan_texture_size_test
           timeout 60 ./vulkan_texture_size_test
           echo "[pass] vulkan_texture_size_test"
+
+      - name: Build and run slang_texture_index_bounds_test (ASan)
+        shell: bash
+        working-directory: samples/gfx/slang_texture_index_bounds
+        run: |
+          set -eu
+          # Regression test for the texture-semantic index-bounds
+          # fix in gfx/drivers_shader/slang_process.cpp::
+          # validate_texture_semantic_index().  Pre-fix only
+          # SLANG_TEXTURE_SEMANTIC_PASS_OUTPUT was bounded against
+          # reflection->pass_number; ORIGINAL_HISTORY, PASS_FEEDBACK
+          # and USER had no upper bound on their array index.  The
+          # index suffix in arrayed semantic names like
+          # `OriginalHistory42` is parsed via strtoul in
+          # slang_name_to_texture_semantic_array() and propagates
+          # into the downstream resize_minimum() calls in
+          # set_ubo_texture_offset() and the direct sampler-binding
+          # loop.  A malicious slang shader declaring
+          # `OriginalHistory4294967294` makes std::vector::resize
+          # request ~128 GiB, throwing std::bad_alloc which
+          # propagates unhandled out of the filter-chain create
+          # path, terminating the process.  Reachable from any
+          # malicious slang preset (downloaded via Online Updater
+          # or shipped third-party).  Build under AddressSanitizer
+          # so any reintroduction is caught at the bounds level.
+          # If slang_process.cpp amends the cap table or the
+          # dispatch structure, the verbatim copy in
+          # slang_texture_index_bounds_test.c must follow.
+          make clean all SANITIZER=address
+          test -x slang_texture_index_bounds_test
+          timeout 60 ./slang_texture_index_bounds_test
+          echo "[pass] slang_texture_index_bounds_test"
