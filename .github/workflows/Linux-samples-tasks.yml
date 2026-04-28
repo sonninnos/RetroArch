@@ -100,3 +100,29 @@ jobs:
           test -x http_method_match_test
           timeout 60 ./http_method_match_test
           echo "[pass] http_method_match_test"
+
+      - name: Build and run video_shader_wildcard_test (ASan)
+        shell: bash
+        working-directory: samples/tasks/video_shader_parse
+        run: |
+          set -eu
+          # Regression test for the buffer-overflow defences in
+          # gfx/video_shader_parse.c::video_shader_replace_wildcards_impl().
+          # Pre-fix, _len = strlcpy(replace_text, source, 256)
+          # returned strlen(source) regardless of the 256-byte
+          # cap.  When source was a $CONTENT-DIR$ / $PRESET-DIR$
+          # / $CORE$ value longer than 256 bytes (DIR_MAX_LENGTH
+          # is 4096, NAME_MAX_LENGTH 256), the subsequent
+          # memcpy(dst + prefix, replace_text, _len) read off
+          # the end of replace_text and the strlcpy's size
+          # argument PATH_MAX_LENGTH - prefix - _len underflowed
+          # size_t.  Build under AddressSanitizer so the OOB
+          # read on replace_text and the underflow-driven OOB
+          # write on dst are both caught at the bounds level.
+          # If video_shader_parse.c amends the post-replacement
+          # arithmetic, the verbatim copy in
+          # video_shader_wildcard_test.c must follow.
+          make clean all SANITIZER=address
+          test -x video_shader_wildcard_test
+          timeout 60 ./video_shader_wildcard_test
+          echo "[pass] video_shader_wildcard_test"

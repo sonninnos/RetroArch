@@ -345,6 +345,29 @@ static void video_shader_replace_wildcards_impl(
          {
             char *tmp_ptr;
             size_t prefix = (size_t)(found - src);
+
+            /* _len comes from strlcpy / snprintf return values.
+             * strlcpy returns strlen(source) regardless of the
+             * destination capacity, and snprintf returns the
+             * "would-have-written" length, so on long sources
+             * (content_dir_name, library_name, path_basename,
+             * preset_dir_name, all of which can be up to
+             * DIR_MAX_LENGTH = 4096) _len exceeds
+             * sizeof(replace_text) = 256.  The memcpy below
+             * would then read past the end of replace_text into
+             * adjacent stack memory; the strlcpy further down
+             * would underflow (size_t)(PATH_MAX_LENGTH - prefix
+             * - _len) and write tens of GiB.  Clamp here at the
+             * use site so every preceding branch is covered. */
+            if (_len >= sizeof(replace_text))
+               _len = sizeof(replace_text) - 1;
+
+            /* Also bound prefix + _len against the dst buffer
+             * size so the strlcpy below doesn't underflow its
+             * size argument and walk off the end of dst. */
+            if (prefix >= PATH_MAX_LENGTH || _len >= PATH_MAX_LENGTH - prefix)
+               break;
+
             memcpy(dst, src, prefix);
             memcpy(dst + prefix, replace_text, _len);
             strlcpy(dst + prefix + _len, found + token_len,
