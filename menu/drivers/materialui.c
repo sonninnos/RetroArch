@@ -8087,12 +8087,10 @@ static void materialui_frame(void *data, video_frame_info_t *video_info)
             NULL);
 
       /* Draw message box */
-      _len        = strlcpy(msg, label, sizeof(msg));
-      msg[  _len] = '\n';
-      msg[++_len] = '\0';
-      strlcpy(msg       + _len,
-            str,
-            sizeof(msg) - _len);
+      _len = 0;
+      strlcpy_append(msg, sizeof(msg), &_len, label);
+      strlcpy_append(msg, sizeof(msg), &_len, "\n");
+      strlcpy_append(msg, sizeof(msg), &_len, str);
       materialui_render_messagebox(mui,
             p_disp,
             userdata, video_width, video_height,
