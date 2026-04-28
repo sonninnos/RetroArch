@@ -1017,6 +1017,7 @@ static struct vk_texture vulkan_create_texture(vk_t *vk,
       enum vk_texture_type type)
 {
    unsigned i;
+   uint64_t buffer_size_64;
    uint32_t buffer_width;
    struct vk_texture tex;
    VkImageCreateInfo info;
@@ -1051,11 +1052,18 @@ static struct vk_texture vulkan_create_texture(vk_t *vk,
    /* Align stride to 4 bytes to make sure we can use compute shader uploads without too many problems. */
    buffer_width                      = width * vulkan_format_to_bpp(format);
    buffer_width                      = (buffer_width + 3u) & ~3u;
+   /* Compute the buffer size in 64-bit. width*bpp*height as a 32-bit
+    * unsigned would wrap for sufficiently large dimensions (e.g. an
+    * upscaled shader render target chain), leaving the staging buffer
+    * underallocated relative to the upload memcpy loop further down
+    * and producing a heap overflow on the host side. VkDeviceSize is
+    * 64-bit; widen the math to match. */
+   buffer_size_64                    = (uint64_t)buffer_width * (uint64_t)height;
 
    buffer_info.sType                 = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
    buffer_info.pNext                 = NULL;
    buffer_info.flags                 = 0;
-   buffer_info.size                  = buffer_width * height;
+   buffer_info.size                  = buffer_size_64;
    buffer_info.usage                 = 0;
    buffer_info.sharingMode           = VK_SHARING_MODE_EXCLUSIVE;
    buffer_info.queueFamilyIndexCount = 0;
@@ -1365,14 +1373,18 @@ static struct vk_texture vulkan_create_texture(vk_t *vk,
                const uint8_t *src = NULL;
                void *ptr          = NULL;
                unsigned bpp       = vulkan_format_to_bpp(tex.format);
-               unsigned stride    = tex.width * bpp;
+               /* Source stride and per-row copy size in size_t to keep
+                * the pointer math and memcpy length safe even when
+                * width*bpp would otherwise wrap a 32-bit unsigned. */
+               size_t stride      = (size_t)tex.width * (size_t)bpp;
+               size_t row_bytes   = (size_t)width     * (size_t)bpp;
 
                vkMapMemory(device, tex.memory, tex.offset, tex.size, 0, &ptr);
 
                dst                = (uint8_t*)ptr;
                src                = (const uint8_t*)initial;
                for (y = 0; y < tex.height; y++, dst += tex.stride, src += stride)
-                  memcpy(dst, src, width * bpp);
+                  memcpy(dst, src, row_bytes);
 
                if (     (tex.flags & VK_TEX_FLAG_NEED_MANUAL_CACHE_MANAGEMENT)
                      && (tex.memory != VK_NULL_HANDLE))

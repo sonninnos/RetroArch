@@ -1,0 +1,109 @@
+name: CI Linux samples/gfx
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
+jobs:
+  samples-gfx:
+    name: Build and run samples/gfx
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build and run vulkan_extension_count_test (ASan)
+        shell: bash
+        working-directory: samples/gfx/vulkan_extension_count
+        run: |
+          set -eu
+          # Regression test for the heap-overflow fix in
+          # gfx/common/vulkan_common.c::vulkan_find_device_extensions.
+          # Pre-fix the function appended the required-extension list
+          # twice -- once via memcpy at the top of the body, then
+          # again in a per-element loop -- consuming
+          # (count_initial + 2*num_required + num_optional) slots in
+          # the caller's buffer.  vulkan_context_create_device_wrapper
+          # sized its malloc for (count_initial + num_required +
+          # num_optional) entries, so a libretro core using the Vulkan
+          # HW context-negotiation interface against a GPU exposing at
+          # least one optional extension hit a one-element heap-buffer-
+          # overflow (8 bytes on 64-bit) at the end of the malloc'd
+          # block.  Build under AddressSanitizer so any reintroduction
+          # of the duplicate write is caught at the bounds level.  If
+          # vulkan_common.c amends the append-to-enabled[] block, the
+          # verbatim copy in vulkan_extension_count_test.c must follow.
+          make clean all SANITIZER=address
+          test -x vulkan_extension_count_test
+          timeout 60 ./vulkan_extension_count_test
+          echo "[pass] vulkan_extension_count_test"
+
+      - name: Build and run vulkan_swapchain_clamp_test (ASan)
+        shell: bash
+        working-directory: samples/gfx/vulkan_swapchain_clamp
+        run: |
+          set -eu
+          # Regression test for the unclamped-swapchain-image-count
+          # fix in gfx/common/vulkan_common.c::vulkan_create_swapchain.
+          # Pre-fix the two vkGetSwapchainImagesKHR calls (count
+          # query + image fill) had no clamp between them, so a driver
+          # returning more than VULKAN_MAX_SWAPCHAIN_IMAGES (8) images
+          # on the second call wrote past context.swapchain_images[8]
+          # and every loop bounded by num_swapchain_images walked past
+          # its compile-time-sized companion array (~12 such loops
+          # across init/deinit/textures/buffers/descriptor pools/
+          # command buffers/readback and direct vk->swapchain[i]
+          # uses).  Build under AddressSanitizer so any reintroduction
+          # of either the request-side or the post-create clamp is
+          # caught at the bounds level.  If vulkan_common.c amends
+          # the cap or the post-create clamp, the verbatim copies in
+          # vulkan_swapchain_clamp_test.c must follow.
+          make clean all SANITIZER=address
+          test -x vulkan_swapchain_clamp_test
+          timeout 60 ./vulkan_swapchain_clamp_test
+          echo "[pass] vulkan_swapchain_clamp_test"
+
+      - name: Build and run vulkan_texture_size_test (ASan)
+        shell: bash
+        working-directory: samples/gfx/vulkan_texture_size
+        run: |
+          set -eu
+          # Regression test for the 32-bit-overflow fix in
+          # gfx/drivers/vulkan.c::vulkan_create_texture's staging-
+          # buffer sizing.  Pre-fix the buffer_info.size calculation
+          # (buffer_width * height) was unsigned*unsigned in 32-bit
+          # before being widened to VkDeviceSize on assignment.  With
+          # dimensions large enough to wrap (e.g. 65536x16385x4 ->
+          # 0x1_0004_0000 truncates to 0x40000), the staging buffer
+          # was malloc'd at the wrapped (small) size while the per-row
+          # upload memcpy loop walked the full width x height,
+          # writing past the mapped region into adjacent heap memory.
+          # Reachable from libretro cores supplying oversized
+          # retro_framebuffer dimensions and from vulkan_load_texture
+          # / vulkan_set_texture_frame.  Build under AddressSanitizer
+          # so any reintroduction of the 32-bit arithmetic is caught
+          # at the bounds level.  If vulkan.c amends the size
+          # calculation or upload-loop strides, the verbatim copies
+          # in vulkan_texture_size_test.c must follow.
+          make clean all SANITIZER=address
+          test -x vulkan_texture_size_test
+          timeout 60 ./vulkan_texture_size_test
+          echo "[pass] vulkan_texture_size_test"
