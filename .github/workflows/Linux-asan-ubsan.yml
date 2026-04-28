@@ -1,9 +1,24 @@
 name: CI Linux ASan + UBSan [No Menu]
 
 # Builds full RetroArch with -fsanitize=address,undefined and runs
-# headless smoke invocations (--help, --features) so AddressSanitizer
-# and UndefinedBehaviorSanitizer instrument the startup config-loading,
-# argument parsing, default-driver init, and cleanup-on-exit paths.
+# headless smoke invocations.  Three coverage tiers, in increasing
+# order of how much of the binary they actually instrument:
+#
+#   1. --help and --features.  Exit(0) directly after printing.
+#      Coverage scope: libc init, main(), frontend driver bootstrap,
+#      argv duplication, the getopt walk, and the print functions.
+#      Strict ASan + UBSan -- baseline confirmed clean (run #1).
+#
+#   2. Headless imageviewer core under Xvfb + xvideo video driver +
+#      null audio driver, --max-frames=300 for a clean shutdown
+#      through the normal runloop teardown.  Exercises core loading
+#      via dlopen, the imageviewer's stb_image-driven loader, the
+#      X11 + XVideo color-conversion pipeline, the runloop, and
+#      cleanup-on-shutdown.  Soft-fail (continue-on-error) on this
+#      first iteration: lots can go wrong (Xvfb quirks, libGL leaks,
+#      driver init noise) that aren't RetroArch bugs but would fail
+#      the run if treated strictly.  Sanitizer findings are still
+#      surfaced in step output for triage.
 #
 # The per-sample tests under .github/workflows/Linux-samples-gfx.yml,
 # Linux-samples-tasks.yml, and Linux-libretro-{db,common}-samples.yml
@@ -43,14 +58,23 @@ jobs:
     steps:
       - name: Install dependencies
         # Mirrors Linux-Headless.yml's apt set so the build matches a
-        # known-good headless configuration.  No sanitizer-specific
-        # packages required; libasan / libubsan ship with the gcc that
-        # ubuntu-latest has installed by default.
+        # known-good headless configuration.  Adds:
+        #   xvfb / x11-utils  -- virtual X server for the imageviewer
+        #                        smoke step + xdpyinfo for diagnostics
+        #   libxv-dev         -- XVideo extension headers, for the
+        #                        xvideo video driver
+        #   libxext-dev / libxxf86vm-dev -- transitive X11 deps that
+        #                        configure's xvideo check requires
+        # No sanitizer-specific packages required; libasan / libubsan
+        # ship with the gcc that ubuntu-latest has installed by
+        # default.
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
             build-essential \
             libxkbcommon-dev libx11-xcb-dev \
+            libxv-dev libxext-dev libxxf86vm-dev \
+            xvfb x11-utils \
             zlib1g-dev libfreetype6-dev \
             libegl1-mesa-dev libgles2-mesa-dev libgbm-dev \
             nvidia-cg-toolkit nvidia-cg-dev \
@@ -60,18 +84,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Configure (no menu, no discord/cheevos/networking)
+      - name: Configure (no menu, no discord/cheevos/networking, xvideo on)
         # Trim the build surface for the first iteration so any
         # sanitizer hit is a RetroArch-internal bug rather than noise
         # from a vendored third-party subsystem.  The disabled
         # subsystems will be re-enabled in follow-up patches as the
-        # baseline stays green.
+        # baseline stays green.  --enable-xvideo is explicit because
+        # the imageviewer smoke step below selects xvideo as the video
+        # driver; if its build deps were ever missing, a silent fall-
+        # back to a different driver would skew the smoke's coverage
+        # without warning.
         run: |
           ./configure \
             --disable-menu \
             --disable-discord \
             --disable-cheevos \
-            --disable-networking
+            --disable-networking \
+            --enable-xvideo
 
       - name: Build with -fsanitize=address,undefined
         # The top-level Makefile (line 153) propagates SANITIZER into
@@ -91,13 +120,12 @@ jobs:
         # driver bootstrap, argv duplication, the getopt walk over
         # the full option table, and retroarch_print_help() itself.
         # Doesn't reach into core loading / video init / cleanup-on-
-        # shutdown -- a follow-up step running with --max-frames=N
-        # against a noop core will extend coverage to the full
-        # lifecycle.  ASan and UBSan both run in halt-on-error mode:
-        # the first run of this workflow (Apr 28 2026, run #1)
-        # reported zero distinct UBSan diagnostics across both
-        # smoke invocations, so the baseline for these two surfaces
-        # is clean and we enforce it.  If a future change introduces
+        # shutdown; the imageviewer smoke step below covers those.
+        # ASan and UBSan both run in halt-on-error mode: the first
+        # run of this workflow (Apr 28 2026, run #1) reported zero
+        # distinct UBSan diagnostics across both --help and
+        # --features, so the baseline for these two surfaces is
+        # clean and we enforce it.  If a future change introduces
         # signed-overflow / alignment / shift-too-large UB along
         # the option-parsing or print paths, this step will fail
         # and the diagnostic line will be in the captured stderr.
@@ -164,3 +192,171 @@ jobs:
             exit 1
           fi
           echo "[pass] retroarch --features under ASan+UBSan"
+
+      - name: Build imageviewer core under ASan + UBSan
+        # The standalone Makefile under cores/libretro-imageviewer/
+        # honours the same SANITIZER= knob as the top-level Makefile
+        # (added in the v9 Makefile cleanup, efae310).  Building the
+        # core with sanitizers enabled means the stb_image-driven
+        # decode path is fully instrumented when RetroArch dlopens
+        # it -- ASan would otherwise only catch heap corruption via
+        # the global allocator interceptor and would miss stack-
+        # buffer-overflow / use-after-return inside stb_image
+        # itself.  Same SANITIZER= value as the main build.
+        run: |
+          set -eu
+          cd cores/libretro-imageviewer
+          make clean
+          make SANITIZER=address,undefined
+          test -x image_core.so
+          file image_core.so
+
+      - name: Generate test PNG for imageviewer
+        # Tiny 8x8 solid-red PNG, 75 bytes.  Hand-rolled via Python
+        # struct + zlib to avoid an apt dependency on imagemagick or
+        # similar.  Python ships on every ubuntu-latest by default.
+        # Saved under /tmp because the workspace lives on a path
+        # GitHub Actions cleans up post-run anyway.
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import struct, zlib
+          def chunk(name, data):
+              crc = zlib.crc32(name + data)
+              return struct.pack('>I', len(data)) + name + data + \
+                     struct.pack('>I', crc)
+          sig  = b'\x89PNG\r\n\x1a\n'
+          ihdr = chunk(b'IHDR',
+                       struct.pack('>IIBBBBB', 8, 8, 8, 2, 0, 0, 0))
+          raw  = b''
+          for _ in range(8):
+              raw += b'\x00' + b'\xff\x00\x00' * 8
+          idat = chunk(b'IDAT', zlib.compress(raw))
+          iend = chunk(b'IEND', b'')
+          with open('/tmp/test.png', 'wb') as f:
+              f.write(sig + ihdr + idat + iend)
+          PY
+          file /tmp/test.png
+
+      - name: Smoke run imageviewer headless under Xvfb (soft-fail)
+        # Loads cores/libretro-imageviewer/image_core.so against a
+        # tiny PNG, runs --max-frames=300 (~5s nominal at 60fps,
+        # ~15-25s under sanitizer overhead), then exits via the
+        # normal runloop teardown path.  Covers what the --help and
+        # --features smokes can't: dlopen of a libretro core,
+        # retro_load_game, the stb_image decode path, the X11 +
+        # XVideo color-conversion + shared-memory image-transfer
+        # pipeline, the runloop, and full cleanup-on-shutdown.
+        #
+        # Soft-fail (continue-on-error: true) on this first
+        # iteration.  Reasoning: lots can go wrong here that aren't
+        # RetroArch bugs -- Xvfb quirks, libGL / Mesa software-
+        # rasterizer leaks at shutdown, X11 driver init noise --
+        # and forcing the workflow to enforce strict cleanliness
+        # before we've measured the baseline would block merges on
+        # noise.  Sanitizer findings ARE still surfaced in the step
+        # output for triage; they just don't fail the job.  Once
+        # the baseline is characterised the same way the --help
+        # step's was, this step can be flipped to strict.
+        #
+        # Audio driver is "null" (no PulseAudio / ALSA dependency
+        # on the runner).  Video driver is "xvideo" because Xvfb
+        # exposes the XVideo extension and that's the smallest /
+        # most self-contained X11 driver in the tree (1163 LOC,
+        # adapted from bSNES/MPlayer, no GL dependency).  Verbose
+        # output is on so the run captures the full log for triage.
+        continue-on-error: true
+        env:
+          # detect_leaks=0 because libGL / Mesa symbol-resolution
+          # plus X11 connection caches produce non-trivial leaks at
+          # process shutdown that aren't RetroArch bugs.  Can be
+          # flipped on later with a suppression file.  Heap
+          # corruption / UAF / double-free still abort under
+          # abort_on_error=1.
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0:print_stacktrace=1:strict_string_checks=1
+          # halt_on_error=0 so a single signed-overflow somewhere
+          # in the runloop doesn't truncate the stderr log before
+          # we see the full picture.  The grep below still
+          # surfaces every "runtime error:" line for triage.
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+          LSAN_OPTIONS: exitcode=0
+        run: |
+          set -eu
+
+          # Start Xvfb on display :99.  -screen geometry is small
+          # because the imageviewer doesn't care about resolution
+          # and we're trying to minimise X server memory.  +extension
+          # GLX is implicit in modern Xvfb; XVideo is exposed by
+          # default.
+          Xvfb :99 -screen 0 320x240x24 -nolisten tcp &
+          XVFB_PID=$!
+          # Ensure cleanup on any exit (including soft-fail ones).
+          trap "kill $XVFB_PID 2>/dev/null || true" EXIT
+          # Give Xvfb time to come up; xdpyinfo also confirms
+          # XVideo is available before we waste cycles trying to
+          # use it.  xdpyinfo prints extension names indented with
+          # leading whitespace, hence the ^[[:space:]]* in the
+          # regex.
+          for i in 1 2 3 4 5; do
+            if DISPLAY=:99 xdpyinfo -queryExtensions 2>/dev/null \
+                 | grep -qE "^[[:space:]]+XVideo\b"; then
+              break
+            fi
+            sleep 1
+          done
+          DISPLAY=:99 xdpyinfo -queryExtensions \
+            | grep -E "^[[:space:]]+(XVideo|MIT-SHM)\b" || true
+
+          # Minimal config: xvideo video, null audio, one frame of
+          # logging detail.  Everything else takes built-in defaults.
+          mkdir -p /tmp/asan-cfg
+          cat > /tmp/asan-cfg/retroarch.cfg <<EOF
+          video_driver = "xvideo"
+          audio_driver = "null"
+          video_threaded = "false"
+          video_fullscreen = "false"
+          video_windowed_fullscreen = "false"
+          EOF
+
+          # Run.  --max-frames triggers a clean shutdown via the
+          # normal runloop teardown after N frames, which is what
+          # we want for cleanup-path coverage.  Wall-clock timeout
+          # is a safety net at 60s; --max-frames at 300 should
+          # finish in well under that even with sanitizer overhead.
+          set +e
+          DISPLAY=:99 timeout 60 ./retroarch \
+            -c /tmp/asan-cfg/retroarch.cfg \
+            -L cores/libretro-imageviewer/image_core.so \
+            /tmp/test.png \
+            --max-frames=300 \
+            --verbose \
+            > /tmp/imageviewer.out 2> /tmp/imageviewer.err
+          rc=$?
+          set -e
+
+          echo "exit=${rc}"
+          echo "=== stdout (last 80) ==="
+          tail -80 /tmp/imageviewer.out || true
+          echo "=== stderr (last 200) ==="
+          tail -200 /tmp/imageviewer.err || true
+
+          # Surface sanitizer findings explicitly (informational --
+          # we do NOT exit 1 because this step is soft-fail).  Once
+          # the baseline is characterised, this section will gate
+          # on findings the same way the --help / --features steps
+          # do.
+          if grep -q "AddressSanitizer:" /tmp/imageviewer.err; then
+            echo ""
+            echo "[INFO] AddressSanitizer reported finding(s):"
+            grep -A 2 "AddressSanitizer:" /tmp/imageviewer.err \
+              | head -40
+          fi
+          ub_count=$(grep -c "runtime error:" /tmp/imageviewer.err \
+                     2>/dev/null || true)
+          if [ "${ub_count:-0}" != "0" ]; then
+            echo ""
+            echo "[INFO] UBSan reported ${ub_count} runtime error(s):"
+            grep -h "runtime error:" /tmp/imageviewer.err \
+              | sort -u | head -20
+          fi
+          echo "[done] imageviewer headless smoke (soft-fail)"
