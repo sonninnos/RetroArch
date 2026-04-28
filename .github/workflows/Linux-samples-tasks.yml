@@ -171,3 +171,26 @@ jobs:
           test -x bsv_replay_bounds_test
           timeout 60 ./bsv_replay_bounds_test
           echo "[pass] bsv_replay_bounds_test"
+
+      - name: Build and run bps_patch_bounds_test (ASan)
+        shell: bash
+        working-directory: samples/tasks/bps_patch
+        run: |
+          set -eu
+          # Regression test for the .bps patch parser bounds in
+          # tasks/task_patch.c::bps_apply_patch.  Pre-fix a
+          # malicious .bps could write attacker-chosen bytes
+          # past the malloc'd target_data buffer (heap-buffer-
+          # overflow WRITE), read past source_data (info leak),
+          # and read past modify_data via TARGET_READ.  The
+          # size-prelude was also unbounded, allowing 32-bit
+          # truncation of modify_target_size to drive a
+          # smaller-than-expected allocation.  Build under
+          # AddressSanitizer so any reintroduction is caught
+          # at the bounds level.  If task_patch.c amends the
+          # action-loop predicates, the verbatim copy in
+          # bps_patch_bounds_test.c must follow.
+          make clean all SANITIZER=address
+          test -x bps_patch_bounds_test
+          timeout 60 ./bps_patch_bounds_test
+          echo "[pass] bps_patch_bounds_test"
