@@ -104,6 +104,7 @@ static void task_cloud_sync_begin_handler(void *user_data, const char *path, boo
    else
    {
       RARCH_WARN(CSPFX "Begin failed.\n");
+      task_free_title(task);
       task_set_title(task, strdup("Cloud Sync failed"));
       task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);
    }
@@ -1278,6 +1279,7 @@ static void task_cloud_sync_end_handler(void *user_data, const char *path, bool 
          _len += strlcpy(title + _len, " and ", sizeof(title) - _len);
       if (sync_state->conflicts)
          strlcpy(title + _len, "conflicts", sizeof(title) - _len);
+      task_free_title(task);
       task_set_title(task, strdup(title));
    }
 
@@ -1328,6 +1330,7 @@ static void task_cloud_sync_task_handler(retro_task_t *task)
          if (!cloud_sync_begin(task_cloud_sync_begin_handler, task))
          {
             RARCH_WARN(CSPFX "Could not begin.\n");
+            task_free_title(task);
             task_set_title(task, strdup("Cloud Sync failed"));
             goto task_finished;
          }
