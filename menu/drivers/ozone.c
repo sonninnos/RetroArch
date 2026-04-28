@@ -3643,6 +3643,24 @@ static void ozone_draw_sidebar(
          enum msg_hash_enums value_idx  = ozone_system_tabs_value[ozone->tabs[i]];
          const char *title              = msg_hash_to_str(value_idx);
          uint32_t text_color            = 0;
+         /* Available pixel width for the ticker.  scale_factor
+          * promotes the right operand to float, and entry_width
+          * may legitimately be small or zero (sidebar collapsed
+          * or animating in -- dimensions_sidebar_width is a float
+          * tween initialised to 0.0f), so the float sum can land
+          * below zero.  Implicit float-to-unsigned conversion of
+          * a negative is UB (C11 6.3.1.4 p1) -- UBSan flagged
+          * the previous integer-typed expression here as e.g.
+          * '-20.4167 outside the range of unsigned int'.  Compute
+          * in signed int (no float intruders) and clamp at zero;
+          * a non-positive width means there's no room to draw
+          * anything, which the ticker treats as 'skip' rather
+          * than scribbling at the wrap-around offset. */
+         int avail_width                = entry_width
+               - ozone->dimensions.sidebar_entry_icon_size
+               - (int)(40.0f * scale_factor);
+         unsigned ticker_field_width    = avail_width > 0
+               ? (unsigned)avail_width : 0;
          if (ozone->theme)
             text_color                  = selected
                ? COLOR_TEXT_ALPHA(ozone->theme->text_selected_rgba, text_alpha)
@@ -3651,13 +3669,7 @@ static void ozone_draw_sidebar(
          if (use_smooth_ticker)
          {
             ticker_smooth.selected    = selected;
-            /* TODO/FIXME - undefined behavior reported by ASAN -
-             *-12.549 is outside the range of representable values
-             of type 'unsigned int'
-             * */
-            ticker_smooth.field_width = (entry_width
-                  - ozone->dimensions.sidebar_entry_icon_size
-                  - 40 * scale_factor);
+            ticker_smooth.field_width = ticker_field_width;
             ticker_smooth.src_str     = title;
             ticker_smooth.dst_str     = console_title;
             ticker_smooth.dst_str_len = sizeof(console_title);
@@ -3666,10 +3678,9 @@ static void ozone_draw_sidebar(
          }
          else
          {
-            ticker.len      = (entry_width
-                  - ozone->dimensions.sidebar_entry_icon_size
-                  - 40 * scale_factor)
-                  / ozone->fonts.sidebar.glyph_width;
+            ticker.len      = ozone->fonts.sidebar.glyph_width
+                  ? ticker_field_width / ozone->fonts.sidebar.glyph_width
+                  : 0;
             ticker.s        = console_title;
             ticker.selected = selected;
             ticker.str      = title;
@@ -3796,33 +3807,40 @@ static void ozone_draw_sidebar(
          if (ozone->sidebar_collapsed)
             goto console_iterate;
 
-         if (use_smooth_ticker)
+         /* See matching computation earlier in this function for
+          * the rationale; entry_width can be small or zero
+          * (sidebar_width is a float tween, init 0.0f) and the
+          * float `40 * scale_factor` term promotes the sum to
+          * float, so the result can land below zero and the
+          * implicit conversion to unsigned/size_t is UB. */
          {
-            ticker_smooth.selected    = selected;
-            /* TODO/FIXME - undefined behavior reported by ASAN -
-             *-12.549 is outside the range of representable values
-             of type 'unsigned int'
-             * */
-            ticker_smooth.field_width = (entry_width
+            int avail_width                = entry_width
                   - ozone->dimensions.sidebar_entry_icon_size
-                  - 40 * scale_factor);
-            ticker_smooth.src_str     = node->console_name;
-            ticker_smooth.dst_str     = console_title;
-            ticker_smooth.dst_str_len = sizeof(console_title);
+                  - (int)(40.0f * scale_factor);
+            unsigned ticker_field_width    = avail_width > 0
+                  ? (unsigned)avail_width : 0;
 
-            gfx_animation_ticker_smooth(&ticker_smooth);
-         }
-         else
-         {
-            ticker.len      = (entry_width
-                  - ozone->dimensions.sidebar_entry_icon_size
-                  - 40 * scale_factor)
-                  / ozone->fonts.sidebar.glyph_width;
-            ticker.s        = console_title;
-            ticker.selected = selected;
-            ticker.str      = node->console_name;
+            if (use_smooth_ticker)
+            {
+               ticker_smooth.selected    = selected;
+               ticker_smooth.field_width = ticker_field_width;
+               ticker_smooth.src_str     = node->console_name;
+               ticker_smooth.dst_str     = console_title;
+               ticker_smooth.dst_str_len = sizeof(console_title);
 
-            gfx_animation_ticker(&ticker);
+               gfx_animation_ticker_smooth(&ticker_smooth);
+            }
+            else
+            {
+               ticker.len      = ozone->fonts.sidebar.glyph_width
+                     ? ticker_field_width / ozone->fonts.sidebar.glyph_width
+                     : 0;
+               ticker.s        = console_title;
+               ticker.selected = selected;
+               ticker.str      = node->console_name;
+
+               gfx_animation_ticker(&ticker);
+            }
          }
 
          gfx_display_draw_text(
