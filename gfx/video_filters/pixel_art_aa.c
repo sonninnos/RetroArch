@@ -1,6 +1,7 @@
 #include "softfilter.h"
 #include <stdlib.h>
 #include <string.h>
+#include <retro_inline.h>
 
 #ifdef RARCH_INTERNAL
 #define softfilter_get_implementation paa_get_implementation
