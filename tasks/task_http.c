@@ -23,9 +23,6 @@
 #include <retro_timers.h>
 #include <retro_miscellaneous.h>
 
-#ifdef RARCH_INTERNAL
-#include "../gfx/video_display_server.h"
-#endif
 #include "task_file_transfer.h"
 #include "tasks_internal.h"
 
@@ -241,20 +238,6 @@ static bool task_http_finder(retro_task_t *task, void *user_data)
       if ((http = (http_handle_t*)task->state))
          return string_is_equal(http->connection_url, (const char*)user_data);
    return false;
-}
-
-/* Forward task progress to the platform's window/taskbar progress
- * indicator (e.g. ITaskbarList3 on Win32). Exposed via tasks_internal.h
- * so non-HTTP tasks (such as the Core Updater's outer aggregating tasks)
- * can wire it as their progress_cb and have the desktop reflect their
- * progress, the same way titled HTTP transfers already do. */
-void task_window_progress_cb(retro_task_t *task)
-{
-#ifdef RARCH_INTERNAL
-   if (task)
-      video_display_server_set_window_progress(task->progress,
-            ((task->flags & RETRO_TASK_FLG_FINISHED) > 0));
-#endif
 }
 
 static void *task_push_http_transfer_generic_titled(

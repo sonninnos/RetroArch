@@ -1439,6 +1439,7 @@ static void task_push_cloud_sync_with_mode(int conflict_resolution)
    task->title    = strdup(task_title);
    task->handler  = task_cloud_sync_task_handler;
    task->callback = task_cloud_sync_cb;
+   task->progress_cb = task_window_progress_cb;
 
    task_queue_push(task);
 }
