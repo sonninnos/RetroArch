@@ -9322,6 +9322,7 @@ static void general_write_handler(rarch_setting_t *setting)
       case MENU_ENUM_LABEL_CONTENT_SHOW_PLAYLIST_TABS:
       case MENU_ENUM_LABEL_CONTENT_SHOW_EXPLORE:
       case MENU_ENUM_LABEL_CONTENT_SHOW_CONTENTLESS_CORES:
+      case MENU_ENUM_LABEL_HISTORY_LIST_ENABLE:
          {
             struct menu_state *menu_st = menu_state_get_ptr();
             if (menu_st->driver_ctx->environ_cb)

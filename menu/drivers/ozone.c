@@ -5283,27 +5283,27 @@ static void ozone_refresh_system_tabs_list(ozone_handle_t * ozone)
    {
       if (settings->bools.menu_content_show_favorites)
          ozone->tabs[++ozone->system_tab_end] = OZONE_SYSTEM_TAB_FAVORITES;
-      if (settings->bools.menu_content_show_history)
+      if (settings->bools.menu_content_show_history && settings->bools.history_list_enable)
          ozone->tabs[++ozone->system_tab_end] = OZONE_SYSTEM_TAB_HISTORY;
    }
    else
    {
-      if (settings->bools.menu_content_show_history)
+      if (settings->bools.menu_content_show_history && settings->bools.history_list_enable)
          ozone->tabs[++ozone->system_tab_end] = OZONE_SYSTEM_TAB_HISTORY;
       if (settings->bools.menu_content_show_favorites)
          ozone->tabs[++ozone->system_tab_end] = OZONE_SYSTEM_TAB_FAVORITES;
    }
 
 #ifdef HAVE_IMAGEVIEWER
-   if (settings->bools.menu_content_show_images)
+   if (settings->bools.menu_content_show_images && settings->bools.history_list_enable)
       ozone->tabs[++ozone->system_tab_end] = OZONE_SYSTEM_TAB_IMAGES;
 #endif
 
-   if (settings->bools.menu_content_show_music)
+   if (settings->bools.menu_content_show_music && settings->bools.history_list_enable)
       ozone->tabs[++ozone->system_tab_end] = OZONE_SYSTEM_TAB_MUSIC;
 
 #if defined(HAVE_FFMPEG) || defined(HAVE_MPV)
-   if (settings->bools.menu_content_show_video)
+   if (settings->bools.menu_content_show_video && settings->bools.history_list_enable)
       ozone->tabs[++ozone->system_tab_end] = OZONE_SYSTEM_TAB_VIDEO;
 #endif
 
