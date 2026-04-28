@@ -6984,6 +6984,21 @@ bool input_remapping_load_file(void *data, const char *path)
                if (_remap == -1)
                   _remap = RARCH_UNMAPPED;
 
+               /* Reject .rmp values outside the legitimate range.
+                * Runtime use sites in input_driver.c index a
+                * fixed-size analog_value[][8] array using
+                * (_remap - RARCH_FIRST_CUSTOM_BIND); pre-this-patch
+                * a malformed .rmp could supply an arbitrary int
+                * here and OOB-write up to ~1007 elements past
+                * analog_value, corrupting adjacent input-state
+                * fields and (for the last user) the keys[] mask.
+                * Legal values are any concrete bind index in
+                * [0, RARCH_ANALOG_BIND_LIST_END) plus the
+                * RARCH_UNMAPPED sentinel. */
+               if (   _remap != (int)RARCH_UNMAPPED
+                   && (_remap < 0 || _remap >= (int)RARCH_ANALOG_BIND_LIST_END))
+                  _remap = RARCH_UNMAPPED;
+
                configuration_set_uint(settings,
                      settings->uints.input_remap_ids[i][j], _remap);
             }
@@ -7010,6 +7025,12 @@ bool input_remapping_load_file(void *data, const char *path)
             if (config_get_int(conf, ident, &_remap))
             {
                if (_remap == -1)
+                  _remap = RARCH_UNMAPPED;
+
+               /* See the matching comment in the button-branch
+                * above: same OOB-write primitive, same fix. */
+               if (   _remap != (int)RARCH_UNMAPPED
+                   && (_remap < 0 || _remap >= (int)RARCH_ANALOG_BIND_LIST_END))
                   _remap = RARCH_UNMAPPED;
 
                configuration_set_uint(settings,

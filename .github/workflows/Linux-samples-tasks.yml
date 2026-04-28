@@ -126,3 +126,27 @@ jobs:
           test -x video_shader_wildcard_test
           timeout 60 ./video_shader_wildcard_test
           echo "[pass] video_shader_wildcard_test"
+
+      - name: Build and run input_remap_bounds_test (ASan)
+        shell: bash
+        working-directory: samples/tasks/input_remap
+        run: |
+          set -eu
+          # Regression test for the input-remap analog-axis OOB-
+          # write fixes in configuration.c::input_remapping_load_file()
+          # and input/input_driver.c.  Pre-fix a malformed .rmp
+          # could supply a remap target outside [0, RARCH_ANALOG_
+          # BIND_LIST_END), which the use sites in input_driver.c
+          # then indexed into a fixed-size analog_value[][8] array
+          # without bounds (button -> analog branch) or with a
+          # broken bound that compared elements against bytes
+          # (analog -> analog branch using sizeof instead of
+          # ARRAY_SIZE).  Build under AddressSanitizer so any
+          # reintroduction of either primitive is caught at the
+          # bounds level.  If configuration.c or input_driver.c
+          # amends the relevant predicates, the verbatim copies
+          # in input_remap_bounds_test.c must follow.
+          make clean all SANITIZER=address
+          test -x input_remap_bounds_test
+          timeout 60 ./input_remap_bounds_test
+          echo "[pass] input_remap_bounds_test"

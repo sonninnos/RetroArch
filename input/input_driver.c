@@ -7384,13 +7384,26 @@ void input_driver_poll(void)
                      }
                      else
                      {
-                        int invert = 1;
+                        unsigned remap_axis_bind =
+                              remap_button - RARCH_FIRST_CUSTOM_BIND;
+                        int      invert          = 1;
+
+                        /* Bound: analog_value is int16_t[8].  remap_button
+                         * comes from settings->uints.input_remap_ids[][]
+                         * which is loaded from .rmp config files;
+                         * input_remapping_load_file's config_get_int
+                         * accepts any integer, so a malformed .rmp can
+                         * supply remap_button anywhere in (RARCH_FIRST_
+                         * CUSTOM_BIND, INT_MAX], producing a write at
+                         * arbitrary offset past analog_value[i].  Reject
+                         * out-of-range targets here. */
+                        if (remap_axis_bind >= ARRAY_SIZE(handle->analog_value[i]))
+                           continue;
 
                         if (remap_button % 2 != 0)
                            invert = -1;
 
-                        handle->analog_value[i][
-                           remap_button - RARCH_FIRST_CUSTOM_BIND] =
+                        handle->analog_value[i][remap_axis_bind] =
                               (p_new_state->analog_buttons[j]
                                ? p_new_state->analog_buttons[j]
                                : 32767) * invert;
@@ -7424,7 +7437,11 @@ void input_driver_poll(void)
                         unsigned remap_axis_bind =
                            remap_axis - RARCH_FIRST_CUSTOM_BIND;
 
-                        if (remap_axis_bind < sizeof(handle->analog_value[i]))
+                        /* Pre-patch this read 'sizeof(handle->analog_value[i])'
+                         * which is 16 (bytes), but the array has 8 elements;
+                         * any remap_axis_bind in [8, 15] caused an OOB write.
+                         * Use ARRAY_SIZE so the check is in elements. */
+                        if (remap_axis_bind < ARRAY_SIZE(handle->analog_value[i]))
                         {
                            int invert = 1;
                            if (     (k % 2 == 0 && remap_axis % 2 != 0)
