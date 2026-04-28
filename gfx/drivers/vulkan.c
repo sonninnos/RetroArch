@@ -1289,6 +1289,20 @@ static struct vk_texture vulkan_create_texture(vk_t *vk,
             vkDestroyImage(device, tex.image, NULL);
          if (tex.buffer)
             vkDestroyBuffer(device, tex.buffer, NULL);
+         /* The `if (old)` cleanup further below is skipped by this
+          * early return, but old->view/image/buffer were already
+          * destroyed at the top of the `if (old)` block above and
+          * old->memory still owns a live VkDeviceMemory.  Free it
+          * here, otherwise it leaks across the call.  Mirrors the
+          * unmap-before-free done in the pilfer branch. */
+         if (old)
+         {
+            if (old->mapped)
+               vkUnmapMemory(device, old->memory);
+            if (old->memory != VK_NULL_HANDLE)
+               vkFreeMemory(device, old->memory, NULL);
+            memset(old, 0, sizeof(*old));
+         }
          memset(&tex, 0, sizeof(tex));
          return tex;
       }
@@ -1299,8 +1313,18 @@ static struct vk_texture vulkan_create_texture(vk_t *vk,
 
    if (old)
    {
+      /* old->view/image/buffer were already destroyed at the top of
+       * the `if (old)` block above.  In the no-pilfer path we did not
+       * take ownership of old->memory, so it still owns a live
+       * VkDeviceMemory; free it here.  Unmap first to mirror the
+       * pilfer branch and to avoid free-while-mapped, which the spec
+       * permits but MoltenVK has historically handled poorly. */
       if (old->memory != VK_NULL_HANDLE)
+      {
+         if (old->mapped)
+            vkUnmapMemory(device, old->memory);
          vkFreeMemory(device, old->memory, NULL);
+      }
       memset(old, 0, sizeof(*old));
    }
 
@@ -3867,10 +3891,20 @@ static void vulkan_init_samplers(vk_t *vk)
 
 static void vulkan_destroy_buffer(VkDevice device, struct vk_buffer *buffer)
 {
-   vkUnmapMemory(device, buffer->memory);
-   vkFreeMemory(device, buffer->memory, NULL);
+   /* Order: unmap (only if mapped) -> destroy buffer -> free memory.
+    * vkFreeMemory must not be called while a VkBuffer is still bound
+    * to the memory (VUID-vkFreeMemory-memory-00677), and vkUnmapMemory
+    * must not be called on memory that is not currently mapped.
+    * vulkan_create_buffer leaves buffer->mapped == NULL when the
+    * initial vkMapMemory fails, so the mapped check is required. */
+   if (buffer->mapped)
+      vkUnmapMemory(device, buffer->memory);
 
-   vkDestroyBuffer(device, buffer->buffer, NULL);
+   if (buffer->buffer != VK_NULL_HANDLE)
+      vkDestroyBuffer(device, buffer->buffer, NULL);
+
+   if (buffer->memory != VK_NULL_HANDLE)
+      vkFreeMemory(device, buffer->memory, NULL);
 
    memset(buffer, 0, sizeof(*buffer));
 }
@@ -4483,8 +4517,10 @@ static void vulkan_init_quad_ibo(vk_t *vk, unsigned max_quads)
    if (res != VK_SUCCESS || !mapped)
    {
       RARCH_ERR("[Vulkan] Failed to map quad IBO memory (VkResult: %d).\n", res);
-      vkFreeMemory(device, vk->quad_ibo.memory, NULL);
+      /* Destroy the buffer before freeing the memory it is bound to
+       * (VUID-vkFreeMemory-memory-00677). */
       vkDestroyBuffer(device, vk->quad_ibo.buffer, NULL);
+      vkFreeMemory(device, vk->quad_ibo.memory, NULL);
       vk->quad_ibo.buffer    = VK_NULL_HANDLE;
       vk->quad_ibo.memory    = VK_NULL_HANDLE;
       vk->quad_ibo.num_quads = 0;
