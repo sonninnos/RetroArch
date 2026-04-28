@@ -353,9 +353,23 @@ size_t word_wrap_wideglyph(char *s, size_t len,
    int additional_counter_normalized = wideglyph_width - 100;
 
    /* Early return if src string length is less
-    * than line width */
+    * than line width.
+    *
+    * NOTE on the strlcpy clamp: strlcpy returns strlen(src),
+    * which exceeds bytes-actually-written if the destination
+    * was too small (truncation case).  Callers (xmb, ozone,
+    * materialui messagebox helpers) use the returned value as
+    * the length argument to memchr() over the destination
+    * buffer; an inflated return walks memchr past the buffer
+    * end into adjacent stack memory.  Clamp the return to the
+    * true bytes-written count: min(strlen(src), len - 1). */
    if (src_end - src < line_width)
-      return strlcpy(s, src, len);
+   {
+      size_t copied = strlcpy(s, src, len);
+      if (copied >= len)
+         copied = (len > 0) ? len - 1 : 0;
+      return copied;
+   }
 
    while (*src != '\0')
    {
@@ -363,8 +377,15 @@ size_t word_wrap_wideglyph(char *s, size_t len,
       unsigned char_len   = (unsigned)(utf8skip(src, 1) - src);
       counter_normalized += 100;
 
-      /* Prevent buffer overflow */
-      if (char_len >= len)
+      /* Prevent buffer overflow.  `remaining` is computed from
+       * the original `len` and the current write offset rather
+       * than tracking it via `len -= char_len` -- the rewinds
+       * at lastspace/lastwideglyph below move `s` backwards
+       * without a matching `len += ...`, which would otherwise
+       * desync the two and break the buffer-space accounting
+       * for the early-return strlcpys. */
+      remaining = len - (size_t)(s - s_start);
+      if (char_len >= remaining)
          break;
 
       if (*src == ' ')
@@ -380,8 +401,10 @@ size_t word_wrap_wideglyph(char *s, size_t len,
           * length is less than line width */
          if (src_end - src <= line_width)
          {
-            remaining = len - (size_t)(s - s_start);
-            return (size_t)(s - s_start) + strlcpy(s, src, remaining);
+            size_t copied = strlcpy(s, src, remaining);
+            if (copied >= remaining)
+               copied = (remaining > 0) ? remaining - 1 : 0;
+            return (size_t)(s - s_start) + copied;
          }
       }
       else if (char_len >= 3)
@@ -392,7 +415,6 @@ size_t word_wrap_wideglyph(char *s, size_t len,
          counter_normalized += additional_counter_normalized;
       }
 
-      len -= char_len;
       while (char_len--)
          *s++ = *src++;
 
@@ -416,8 +438,12 @@ size_t word_wrap_wideglyph(char *s, size_t len,
              * length is less than line width */
             if (src_end - src <= line_width)
             {
+               size_t copied;
                remaining = len - (size_t)(s - s_start);
-               return (size_t)(s - s_start) + strlcpy(s, src, remaining);
+               copied    = strlcpy(s, src, remaining);
+               if (copied >= remaining)
+                  copied = (remaining > 0) ? remaining - 1 : 0;
+               return (size_t)(s - s_start) + copied;
             }
          }
          else if (lastspace)
@@ -434,8 +460,12 @@ size_t word_wrap_wideglyph(char *s, size_t len,
              * length is less than line width */
             if (src_end - src < line_width)
             {
+               size_t copied;
                remaining = len - (size_t)(s - s_start);
-               return (size_t)(s - s_start) + strlcpy(s, src, remaining);
+               copied    = strlcpy(s, src, remaining);
+               if (copied >= remaining)
+                  copied = (remaining > 0) ? remaining - 1 : 0;
+               return (size_t)(s - s_start) + copied;
             }
          }
       }

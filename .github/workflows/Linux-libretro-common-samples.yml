@@ -76,6 +76,7 @@ jobs:
             rbmp_test
             rpng_chunk_overflow_test
             rpng_roundtrip_test
+            word_wrap_overflow_test
           )
 
           # Per-binary run command (overrides ./<binary> if present).
