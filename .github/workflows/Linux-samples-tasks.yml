@@ -150,3 +150,24 @@ jobs:
           test -x input_remap_bounds_test
           timeout 60 ./input_remap_bounds_test
           echo "[pass] input_remap_bounds_test"
+
+      - name: Build and run bsv_replay_bounds_test (ASan)
+        shell: bash
+        working-directory: samples/tasks/bsv_replay
+        run: |
+          set -eu
+          # Regression test for the .bsv replay-file event-count
+          # bounds in input/bsv/bsvmovie.c.  Pre-fix a malformed
+          # replay file with key_event_count > 128 or
+          # input_event_count > 512 caused a heap-buffer-overflow
+          # write into bsv_movie_t (a calloc'd struct) with
+          # attacker-chosen 8/12-byte payloads at attacker-chosen
+          # offsets up to ~500KB.  Build under AddressSanitizer
+          # so any reintroduction of the unbounded count is caught
+          # at the bounds level.  If input/bsv/bsvmovie.c amends
+          # the predicate, the verbatim copy in
+          # bsv_replay_bounds_test.c must follow.
+          make clean all SANITIZER=address
+          test -x bsv_replay_bounds_test
+          timeout 60 ./bsv_replay_bounds_test
+          echo "[pass] bsv_replay_bounds_test"
