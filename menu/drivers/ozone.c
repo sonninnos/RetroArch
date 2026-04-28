@@ -6398,10 +6398,28 @@ border_iterate:
                   + x_offset
                   + entry_width
                   - ozone->dimensions.entry_icon_padding,
-            y
-                  + ozone->dimensions.entry_height / 2
+            /* The y arg is unsigned but the sum below evaluates to
+             * a float because of scroll_y, which is clamped to <= 0
+             * (see lines 10435-10436).  When the row's vertical
+             * centre lands above the visible top -- reachable
+             * during pointer/wheel scrolling whenever the topmost
+             * partially-visible row's value text would draw above
+             * the header -- the float value can be slightly
+             * negative (UBSan reported -10.0781).  Implicit
+             * float-to-unsigned conversion of a negative is UB
+             * (C11 6.3.1.4 p1); silently wraps to ~UINT_MAX in
+             * practice, which the renderer then implicit-converts
+             * back to float as a huge off-screen coordinate, so
+             * the text just fails to draw rather than corrupting
+             * anything.  Cast through int -- well-defined for the
+             * range these screen coords occupy -- so the negative
+             * case wraps in a defined manner instead.  Matches the
+             * (int)((float)y + scroll_y) idiom used at lines 5970,
+             * 5985, 3581, 3595. */
+            (int)((float)y
+                  + ozone->dimensions.entry_height / 2.0f
                   + ozone->fonts.entries_label.line_centre_offset
-                  + scroll_y,
+                  + scroll_y),
             alpha_uint32,
             &entry,
             mymat);
