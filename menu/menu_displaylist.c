@@ -4229,7 +4229,7 @@ static unsigned menu_displaylist_parse_playlists(
                         MENU_SETTING_ACTION, 0, 0, NULL))
                   count++;
 
-            if (settings->bools.menu_content_show_history)
+            if (settings->bools.menu_content_show_history && g_defaults.content_history)
                if (menu_entries_append(info_list,
                         playlist_get_conf_path(g_defaults.content_history),
                         MENU_ENUM_LABEL_LOAD_CONTENT_HISTORY_STR,
@@ -4239,7 +4239,7 @@ static unsigned menu_displaylist_parse_playlists(
          }
          else
          {
-            if (settings->bools.menu_content_show_history)
+            if (settings->bools.menu_content_show_history && g_defaults.content_history)
                if (menu_entries_append(info_list,
                         playlist_get_conf_path(g_defaults.content_history),
                         MENU_ENUM_LABEL_LOAD_CONTENT_HISTORY_STR,
@@ -4258,7 +4258,7 @@ static unsigned menu_displaylist_parse_playlists(
       }
 
 #ifdef HAVE_IMAGEVIEWER
-      if (settings->bools.menu_content_show_images)
+      if (settings->bools.menu_content_show_images && g_defaults.image_history)
          if (menu_entries_append(info_list,
                   playlist_get_conf_path(g_defaults.image_history),
                   MENU_ENUM_LABEL_GOTO_IMAGES_STR,
@@ -4267,7 +4267,7 @@ static unsigned menu_displaylist_parse_playlists(
             count++;
 #endif
 
-      if (settings->bools.menu_content_show_music)
+      if (settings->bools.menu_content_show_music && g_defaults.music_history)
          if (menu_entries_append(info_list,
                   playlist_get_conf_path(g_defaults.music_history),
                   MENU_ENUM_LABEL_GOTO_MUSIC_STR,
@@ -4276,7 +4276,7 @@ static unsigned menu_displaylist_parse_playlists(
             count++;
 
 #if defined(HAVE_FFMPEG) || defined(HAVE_MPV)
-      if (settings->bools.menu_content_show_video)
+      if (settings->bools.menu_content_show_video && g_defaults.video_history)
          if (menu_entries_append(info_list,
                   playlist_get_conf_path(g_defaults.video_history),
                   MENU_ENUM_LABEL_GOTO_VIDEO_STR,
@@ -15368,7 +15368,7 @@ bool menu_displaylist_ctl(enum menu_displaylist_ctl_state type,
                                  MENU_SETTING_ACTION, 0, 0, NULL))
                            count++;
 
-                     if (settings->bools.menu_content_show_history)
+                     if (settings->bools.menu_content_show_history && g_defaults.content_history)
                         if (menu_entries_append(info->list,
                                  playlist_get_conf_path(g_defaults.content_history),
                                  MENU_ENUM_LABEL_LOAD_CONTENT_HISTORY_STR,
@@ -15378,7 +15378,7 @@ bool menu_displaylist_ctl(enum menu_displaylist_ctl_state type,
                   }
                   else
                   {
-                     if (settings->bools.menu_content_show_history)
+                     if (settings->bools.menu_content_show_history && g_defaults.content_history)
                         if (menu_entries_append(info->list,
                                  playlist_get_conf_path(g_defaults.content_history),
                                  MENU_ENUM_LABEL_LOAD_CONTENT_HISTORY_STR,
