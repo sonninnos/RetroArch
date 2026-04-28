@@ -9322,12 +9322,25 @@ static void general_write_handler(rarch_setting_t *setting)
       case MENU_ENUM_LABEL_CONTENT_SHOW_PLAYLIST_TABS:
       case MENU_ENUM_LABEL_CONTENT_SHOW_EXPLORE:
       case MENU_ENUM_LABEL_CONTENT_SHOW_CONTENTLESS_CORES:
-      case MENU_ENUM_LABEL_HISTORY_LIST_ENABLE:
          {
             struct menu_state *menu_st = menu_state_get_ptr();
             if (menu_st->driver_ctx->environ_cb)
                menu_st->driver_ctx->environ_cb(MENU_ENVIRON_RESET_HORIZONTAL_LIST,
                      NULL, menu_st->userdata);
+         }
+         break;
+      case MENU_ENUM_LABEL_HISTORY_LIST_ENABLE:
+         {
+            struct menu_state *menu_st = menu_state_get_ptr();
+            /* Sync history playlist init state to the new setting value
+             * (HISTORY_INIT internally calls HISTORY_DEINIT first, then
+             * early-returns if history_list_enable is now OFF). */
+            command_event(CMD_EVENT_HISTORY_INIT, NULL);
+            if (menu_st->driver_ctx->environ_cb)
+               menu_st->driver_ctx->environ_cb(MENU_ENVIRON_RESET_HORIZONTAL_LIST,
+                     NULL, menu_st->userdata);
+            menu_st->flags            |=  MENU_ST_FLAG_PREVENT_POPULATE
+                                       |  MENU_ST_FLAG_ENTRIES_NEED_REFRESH;
          }
          break;
       case MENU_ENUM_LABEL_SUSPEND_SCREENSAVER_ENABLE:
