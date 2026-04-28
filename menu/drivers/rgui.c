@@ -5919,13 +5919,8 @@ static void rgui_render(void *data, unsigned width, unsigned height,
 
    if (*rgui->msgbox)
    {
-      /* Draw background */
-      rgui_fill_rect(rgui->frame_buf.data, fb_width, fb_height,
-            0, 0, fb_width, fb_height,
-            rgui->colors.bg_dark_color,
-            rgui->colors.bg_dark_color,
-            (rgui->flags & RGUI_FLAG_BG_THICKNESS) ? true : false);
-
+      /* Draw popup directly on top of the menu; the messagebox
+       * paints its own opaque background within its footprint. */
       rgui_render_messagebox(rgui, rgui->msgbox, fb_width, fb_height);
       rgui->msgbox[0]    = '\0';
       rgui->flags       |=  RGUI_FLAG_FORCE_REDRAW;
