@@ -681,6 +681,51 @@ size_t string_remove_all_whitespace(char *s, const char *str)
 }
 
 /**
+ * strlcpy_append:
+ *
+ * See header (libretro-common/include/string/stdstring.h) for the
+ * full contract.  Bound-checked append; advances *pos by
+ * strlen(@src) on success, returns -1 on truncation.
+ *
+ * Truncation is signalled when *pos >= len already, or when
+ * strlcpy returns a value >= the remaining capacity.  In either
+ * case the destination is left NUL-terminated (strlcpy guarantees
+ * this when its size argument is non-zero) and *pos is clamped to
+ * len - 1 so subsequent calls in a chain become no-ops that also
+ * return -1.
+ **/
+int strlcpy_append(char *s, size_t len, size_t *pos, const char *src)
+{
+   size_t remaining;
+   size_t n;
+
+   if (!s || !pos || !src || len == 0)
+      return -1;
+
+   if (*pos >= len)
+   {
+      /* Already saturated; clamp and report truncation. */
+      *pos = len - 1;
+      return -1;
+   }
+
+   remaining = len - *pos;
+   n         = strlcpy(s + *pos, src, remaining);
+
+   if (n >= remaining)
+   {
+      /* strlcpy truncated.  s + len - 1 is NUL-terminated by
+       * strlcpy's contract.  Clamp *pos so subsequent appends
+       * short-circuit. */
+      *pos = len - 1;
+      return -1;
+   }
+
+   *pos += n;
+   return 0;
+}
+
+/**
  * Retrieve the last occurrence of the given character in a string.
  */
 int string_index_last_occurance(const char *str, char c)
