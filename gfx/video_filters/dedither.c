@@ -1,6 +1,7 @@
 #include "softfilter.h"
 #include <stdlib.h>
 #include <string.h>
+#include <retro_inline.h>
 
 #ifdef RARCH_INTERNAL
 #define softfilter_get_implementation dedither_get_implementation
@@ -41,25 +42,33 @@ static void *dedither_generic_create(const struct softfilter_config *config,
       unsigned max_width, unsigned max_height,
       unsigned threads, softfilter_simd_mask_t simd, void *userdata) {
    struct filter_data *filt = (struct filter_data*)calloc(1, sizeof(*filt));
-   if (!filt) return NULL;
+   if (!filt)
+      return NULL;
    filt->workers = (struct softfilter_thread_data*)calloc(1, sizeof(struct softfilter_thread_data));
    filt->threads = 1; 
    filt->in_fmt  = in_fmt;
    return filt;
 }
 
-static void dedither_generic_destroy(void *data) {
+static void dedither_generic_destroy(void *data)
+{
    struct filter_data *filt = (struct filter_data*)data;
-   if (filt) { free(filt->workers); free(filt); }
+   if (filt)
+   {
+      free(filt->workers);
+      free(filt);
+   }
 }
 
-static void dedither_generic_output(void *data, unsigned *out_width, unsigned *out_height,
-      unsigned width, unsigned height) {
-   *out_width = width; *out_height = height;
+static void dedither_generic_output(void *data, unsigned *out_width, unsigned *out_height, unsigned width, unsigned height)
+{
+   *out_width  = width;
+   *out_height = height;
 }
 
 /* Color comparison with threshold */
-static inline int pix_equal(uint32_t c1, uint32_t c2, int threshold) {
+static INLINE int pix_equal(uint32_t c1, uint32_t c2, int threshold)
+{
    int r = abs((int)((c1 >> 16) & 0xFF) - (int)((c2 >> 16) & 0xFF));
    int g = abs((int)((c1 >> 8) & 0xFF) - (int)((c2 >> 8) & 0xFF));
    int b = abs((int)(c1 & 0xFF) - (int)(c2 & 0xFF));
@@ -67,7 +76,9 @@ static inline int pix_equal(uint32_t c1, uint32_t c2, int threshold) {
 }
 
 /* XRGB8888 Kernel - 2D Dither Detection (6x6) */
-static void dedither_work_cb_xrgb8888(void *data, void *thread_data) {
+static void dedither_work_cb_xrgb8888(void *data, void *thread_data)
+{
+   uint32_t y, x;
    struct softfilter_thread_data *thr = (struct softfilter_thread_data*)thread_data;
    const uint32_t *in = (const uint32_t*)thr->in_data;
    uint32_t *out      = (uint32_t*)thr->out_data;
@@ -75,11 +86,13 @@ static void dedither_work_cb_xrgb8888(void *data, void *thread_data) {
    uint32_t out_stride = (uint32_t)(thr->out_pitch >> 2);
    const int threshold = 40;
 
-   for (uint32_t y = 0; y < thr->height; ++y) {
-      for (uint32_t x = 0; x < thr->width; ++x) {
+   for (y = 0; y < thr->height; ++y)
+   {
+      for (x = 0; x < thr->width; ++x)
+      {
          /* Check safety bounds for 6-pixel horizontal and vertical patterns */
-         if (x >= 2 && x < thr->width - 3 && y >= 2 && y < thr->height - 3) {
-            
+         if (x >= 2 && x < thr->width - 3 && y >= 2 && y < thr->height - 3)
+         {
             const uint32_t *line = in + y * in_stride;
             
             /* Horizontal samples (Row y) */
@@ -104,7 +117,8 @@ static void dedither_work_cb_xrgb8888(void *data, void *thread_data) {
                          pix_equal(v2, v4, threshold) && pix_equal(v4, v6, threshold) &&
                          !pix_equal(h3, v4, threshold));
 
-            if (h_dit || v_dit) {
+            if (h_dit || v_dit)
+            {
                uint32_t avg;
                if (h_dit)
                   avg = (((h2 & 0xFEFEFEFE) >> 1) + ((h4 & 0xFEFEFEFE) >> 1));
@@ -113,27 +127,32 @@ static void dedither_work_cb_xrgb8888(void *data, void *thread_data) {
                
                /* Apply soft blend (1:2:1 weighting) */
                out[y * out_stride + x] = (((avg & 0xFEFEFEFE) >> 1) + ((h3 & 0xFEFEFEFE) >> 1));
-            } else {
-               out[y * out_stride + x] = h3; /* Keep original sharp pixel */
             }
-         } else {
-            out[y * out_stride + x] = in[y * in_stride + x];
+            else
+               out[y * out_stride + x] = h3; /* Keep original sharp pixel */
          }
+         else
+            out[y * out_stride + x] = in[y * in_stride + x];
       }
    }
 }
 
 /* RGB565 Kernel - 2D Dither Detection (6x6) */
-static void dedither_work_cb_rgb565(void *data, void *thread_data) {
+static void dedither_work_cb_rgb565(void *data, void *thread_data)
+{
+   uint32_t x, y;
    struct softfilter_thread_data *thr = (struct softfilter_thread_data*)thread_data;
    const uint16_t *in = (const uint16_t*)thr->in_data;
    uint16_t *out      = (uint16_t*)thr->out_data;
    uint16_t in_stride = (uint16_t)(thr->in_pitch >> 1);
    uint16_t out_stride = (uint16_t)(thr->out_pitch >> 1);
 
-   for (uint32_t y = 0; y < thr->height; ++y) {
-      for (uint32_t x = 0; x < thr->width; ++x) {
-         if (x >= 2 && x < thr->width - 3 && y >= 2 && y < thr->height - 3) {
+   for (y = 0; y < thr->height; ++y)
+   {
+      for (x = 0; x < thr->width; ++x)
+      {
+         if (x >= 2 && x < thr->width - 3 && y >= 2 && y < thr->height - 3)
+         {
             const uint16_t *line = in + y * in_stride;
             uint16_t h1 = line[x - 2]; uint16_t h2 = line[x - 1];
             uint16_t h3 = line[x];     uint16_t h4 = line[x + 1];
@@ -146,22 +165,30 @@ static void dedither_work_cb_rgb565(void *data, void *thread_data) {
             int h_dit = (h1 == h3 && h3 == h5 && h2 == h4 && h4 == h6 && h3 != h4);
             int v_dit = (v1 == h3 && h3 == v5 && v2 == v4 && v4 == v6 && h3 != v2);
 
-            if (h_dit || v_dit) {
+            if (h_dit || v_dit)
+            {
                uint16_t avg_s = (h_dit) ? (((h2 & 0xF7DE) >> 1) + ((h4 & 0xF7DE) >> 1)) : (((v2 & 0xF7DE) >> 1) + ((v4 & 0xF7DE) >> 1));
                out[y * out_stride + x] = (((avg_s & 0xF7DE) >> 1) + ((h3 & 0xF7DE) >> 1));
-            } else out[y * out_stride + x] = h3;
-         } else out[y * out_stride + x] = in[y * in_stride + x];
+            }
+            else
+               out[y * out_stride + x] = h3;
+         }
+         else
+            out[y * out_stride + x] = in[y * in_stride + x];
       }
    }
 }
 
-static void dedither_generic_packets(void *data, struct softfilter_work_packet *packets,
-      void *output, size_t output_stride, const void *input, unsigned width, unsigned height, size_t input_stride) {
+static void dedither_generic_packets(void *data,
+      struct softfilter_work_packet *packets,
+      void *output, size_t output_stride, const void *input,
+      unsigned width, unsigned height, size_t input_stride)
+{
    struct filter_data *filt = (struct filter_data*)data;
-   struct softfilter_thread_data *thr = &filt->workers[0];
-   thr->out_data = output; thr->in_data = input;
+   struct softfilter_thread_data *thr    = &filt->workers[0];
+   thr->out_data  = output; thr->in_data = input;
    thr->out_pitch = output_stride; thr->in_pitch = input_stride;
-   thr->width = width; thr->height = height;
+   thr->width     = width; thr->height = height;
 
    if (filt->in_fmt == SOFTFILTER_FMT_XRGB8888)
       packets[0].work = dedither_work_cb_xrgb8888;
@@ -177,6 +204,7 @@ static const struct softfilter_implementation dedither_generic = {
    SOFTFILTER_API_VERSION, "Master De-Dither 2D (6x6)", "dedither",
 };
 
-const struct softfilter_implementation *softfilter_get_implementation(softfilter_simd_mask_t simd) {
-   (void)simd; return &dedither_generic;
+const struct softfilter_implementation *softfilter_get_implementation(softfilter_simd_mask_t simd)
+{
+   return &dedither_generic;
 }

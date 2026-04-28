@@ -59,26 +59,30 @@ static void paa_query_output_size(void *data, unsigned *out_width, unsigned *out
    *out_height = height << 1;
 }
 
-/* Helper για μίξη RGB565 */
-static inline uint16_t mix_565(uint16_t c1, uint16_t c2) {
+/* Helper RGB565 */
+static INLINE uint16_t mix_565(uint16_t c1, uint16_t c2) {
    return (((c1 & 0xF7DE) >> 1) + ((c2 & 0xF7DE) >> 1));
 }
 
-/* Helper για μίξη XRGB8888 */
-static inline uint32_t mix_8888(uint32_t c1, uint32_t c2) {
+/* Helper XRGB8888 */
+static INLINE uint32_t mix_8888(uint32_t c1, uint32_t c2) {
    return (((c1 & 0xFEFEFEFE) >> 1) + ((c2 & 0xFEFEFEFE) >> 1));
 }
 
 /* Logic for XRGB8888 */
-static void paa_work_cb_xrgb8888(void *data, void *thread_data) {
+static void paa_work_cb_xrgb8888(void *data, void *thread_data)
+{
+   uint32_t x, y;
    struct softfilter_thread_data *thr = (struct softfilter_thread_data*)thread_data;
-   const uint32_t *in = (const uint32_t*)thr->in_data;
-   uint32_t *out      = (uint32_t*)thr->out_data;
-   uint32_t in_stride = (uint32_t)(thr->in_pitch >> 2);
+   const uint32_t *in  = (const uint32_t*)thr->in_data;
+   uint32_t *out       = (uint32_t*)thr->out_data;
+   uint32_t in_stride  = (uint32_t)(thr->in_pitch >> 2);
    uint32_t out_stride = (uint32_t)(thr->out_pitch >> 2);
 
-   for (uint32_t y = 0; y < thr->height; y++) {
-      for (uint32_t x = 0; x < thr->width; x++) {
+   for (y = 0; y < thr->height; y++)
+   {
+      for (x = 0; x < thr->width; x++)
+      {
          uint32_t p = in[y * in_stride + x];
          uint32_t *out_ptr = out + (y * 2 * out_stride) + (x * 2);
          uint32_t n = (y > 0) ? in[(y-1)*in_stride + x] : p;
@@ -89,24 +93,32 @@ static void paa_work_cb_xrgb8888(void *data, void *thread_data) {
          out_ptr[0] = p; out_ptr[1] = p;
          out_ptr[out_stride] = p; out_ptr[out_stride + 1] = p;
 
-         if (n != p && w != p && n == w) out_ptr[0] = mix_8888(p, n);
-         if (n != p && e != p && n == e) out_ptr[1] = mix_8888(p, n);
-         if (s != p && w != p && s == w) out_ptr[out_stride] = mix_8888(p, s);
-         if (s != p && e != p && s == e) out_ptr[out_stride + 1] = mix_8888(p, s);
+         if (n != p && w != p && n == w)
+            out_ptr[0] = mix_8888(p, n);
+         if (n != p && e != p && n == e)
+            out_ptr[1] = mix_8888(p, n);
+         if (s != p && w != p && s == w)
+            out_ptr[out_stride] = mix_8888(p, s);
+         if (s != p && e != p && s == e)
+            out_ptr[out_stride + 1] = mix_8888(p, s);
       }
    }
 }
 
 /* Logic for RGB565 */
-static void paa_work_cb_rgb565(void *data, void *thread_data) {
+static void paa_work_cb_rgb565(void *data, void *thread_data)
+{
+   uint32_t x, y;
    struct softfilter_thread_data *thr = (struct softfilter_thread_data*)thread_data;
    const uint16_t *in = (const uint16_t*)thr->in_data;
    uint16_t *out      = (uint16_t*)thr->out_data;
    uint16_t in_stride = (uint16_t)(thr->in_pitch >> 1);
    uint16_t out_stride = (uint16_t)(thr->out_pitch >> 1);
 
-   for (uint32_t y = 0; y < thr->height; y++) {
-      for (uint32_t x = 0; x < thr->width; x++) {
+   for (y = 0; y < thr->height; y++)
+   {
+      for (x = 0; x < thr->width; x++)
+      {
          uint16_t p = in[y * in_stride + x];
          uint16_t *out_ptr = out + (y * 2 * out_stride) + (x * 2);
          uint16_t n = (y > 0) ? in[(y-1)*in_stride + x] : p;
@@ -117,16 +129,24 @@ static void paa_work_cb_rgb565(void *data, void *thread_data) {
          out_ptr[0] = p; out_ptr[1] = p;
          out_ptr[out_stride] = p; out_ptr[out_stride + 1] = p;
 
-         if (n != p && w != p && n == w) out_ptr[0] = mix_565(p, n);
-         if (n != p && e != p && n == e) out_ptr[1] = mix_565(p, n);
-         if (s != p && w != p && s == w) out_ptr[out_stride] = mix_565(p, s);
-         if (s != p && e != p && s == e) out_ptr[out_stride + 1] = mix_565(p, s);
+         if (n != p && w != p && n == w)
+            out_ptr[0] = mix_565(p, n);
+         if (n != p && e != p && n == e)
+            out_ptr[1] = mix_565(p, n);
+         if (s != p && w != p && s == w)
+            out_ptr[out_stride] = mix_565(p, s);
+         if (s != p && e != p && s == e)
+            out_ptr[out_stride + 1] = mix_565(p, s);
       }
    }
 }
 
-static void paa_get_work_packets(void *data, struct softfilter_work_packet *packets,
-      void *output, size_t output_stride, const void *input, unsigned width, unsigned height, size_t input_stride) {
+static void paa_get_work_packets(void *data,
+		struct softfilter_work_packet *packets,
+		void *output, size_t output_stride,
+		const void *input, unsigned width, unsigned height,
+		size_t input_stride)
+{
    struct filter_data *filt = (struct filter_data*)data;
    struct softfilter_thread_data *thr = &filt->workers[0];
    thr->out_data = output; thr->in_data = input;
@@ -148,5 +168,5 @@ static const struct softfilter_implementation paa_impl = {
 };
 
 const struct softfilter_implementation *softfilter_get_implementation(softfilter_simd_mask_t simd) {
-   (void)simd; return &paa_impl;
+   return &paa_impl;
 }
