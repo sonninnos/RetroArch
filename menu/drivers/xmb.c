@@ -1478,7 +1478,7 @@ static unsigned xmb_get_horizontal_selection_type(xmb_handle_t *xmb)
    if (xmb->categories_selection_ptr > xmb->system_tab_end)
    {
       size_t i = xmb->categories_selection_ptr - xmb->system_tab_end - 1;
-      return xmb->horizontal_list.list[i].type;
+      return (xmb->horizontal_list.size) ? xmb->horizontal_list.list[i].type : 0;
    }
    return 0;
 }

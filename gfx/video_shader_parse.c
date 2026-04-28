@@ -3069,9 +3069,15 @@ bool video_shader_combine_preset_and_apply(
    char *combined_preset_path;
    char combined_preset_name[NAME_MAX_LENGTH];
    const char *preset_ext                = video_shader_get_preset_extension(type);
-   struct video_shader *shader_to_append = (struct video_shader*) calloc(1, sizeof(*shader_to_append));
-   struct video_shader *combined_shader  = (struct video_shader*) calloc(1, sizeof(*combined_shader));
+   struct video_shader *shader_to_append;
+   struct video_shader *combined_shader;
    size_t _len;
+
+   if (!preset_ext || !preset_path || !temp_dir)
+      return false;
+
+   shader_to_append = (struct video_shader*) calloc(1, sizeof(*shader_to_append));
+   combined_shader  = (struct video_shader*) calloc(1, sizeof(*combined_shader));
 
    if (!shader_to_append || !combined_shader)
    {

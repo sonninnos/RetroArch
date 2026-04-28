@@ -2446,6 +2446,7 @@ static int16_t input_state_internal(
          /* Handle Analog to Digital */
          if (     (device == RETRO_DEVICE_JOYPAD)
                && (input_analog_dpad_mode != ANALOG_DPAD_NONE)
+               && joypad
             )
          {
             int16_t ret_axis;
@@ -7855,7 +7856,7 @@ void input_driver_collect_system_input(input_driver_state_t *input_st,
       binds_auto                             = &input_autoconf_binds[joypad_info.joy_idx][RARCH_ENABLE_HOTKEY];
 
 #ifdef HAVE_MENU
-      if (menu_is_alive)
+      if (menu_is_alive && joypad)
       {
          uint8_t s;
          uint8_t a;

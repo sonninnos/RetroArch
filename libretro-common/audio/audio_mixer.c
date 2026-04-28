@@ -419,7 +419,12 @@ audio_mixer_sound_t* audio_mixer_load_wav(void *buffer, int32_t size,
 audio_mixer_sound_t* audio_mixer_load_ogg(void *buffer, int32_t size)
 {
 #ifdef HAVE_STB_VORBIS
-   audio_mixer_sound_t* sound = (audio_mixer_sound_t*)calloc(1, sizeof(*sound));
+   audio_mixer_sound_t* sound;
+
+   if (!buffer || size <= 0)
+      return NULL;
+
+   sound = (audio_mixer_sound_t*)calloc(1, sizeof(*sound));
 
    if (!sound)
       return NULL;
