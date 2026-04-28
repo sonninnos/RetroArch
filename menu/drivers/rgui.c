@@ -4786,12 +4786,10 @@ static void rgui_render_osk(
        * If OSK cannot physically fit on the screen,
        * fallback to old style 'message box' implementation */
       char msg[NAME_MAX_LENGTH];
-      size_t _len = strlcpy(msg, input_label, sizeof(msg) - 2);
-      msg[  _len] = '\n';
-      msg[++_len] = '\0';
-      strlcpy(msg       + _len,
-            input_str,
-            sizeof(msg) - _len);
+      size_t _len = 0;
+      strlcpy_append(msg, sizeof(msg), &_len, input_label);
+      strlcpy_append(msg, sizeof(msg), &_len, "\n");
+      strlcpy_append(msg, sizeof(msg), &_len, input_str);
       rgui_render_messagebox(rgui, msg, fb_width, fb_height);
       return;
    }
