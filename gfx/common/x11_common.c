@@ -252,12 +252,30 @@ static bool xss_screensaver_inhibit(Display *dpy, bool enable)
     return true;
 }
 #else
-static bool xss_screensaver_inhibit(Display *dpy, bool enable)
-{
-    (void) dpy;
-    return false;
-}
+static bool xss_screensaver_inhibit(Display *dpy, bool enable) { return false; }
 #endif
+
+/* Probe once for xdg-screensaver and its xset backend dependency.
+ * xdg-screensaver's "X11" backend shells out to xset; if xset is missing
+ * (common on minimal installs / containers / some WMs without
+ * x11-xserver-utils), invoking xdg-screensaver spams stderr with
+ * "xset: not found" and "Illegal number" without us ever knowing why.
+ * Check up front so we can silently no-op instead. */
+static bool xdg_screensaver_probe(void)
+{
+   /* Both are needed: xdg-screensaver itself, and xset which it execs.
+    * `command -v` is a POSIX shell builtin so this works under /bin/sh
+    * on every platform that has system(). Redirecting both streams
+    * keeps the probe silent. */
+   int ret = system("command -v xdg-screensaver >/dev/null 2>&1 && "
+                "command -v xset >/dev/null 2>&1");
+   if (ret == -1 || WEXITSTATUS(ret) != 0)
+   {
+      RARCH_LOG("[X11] xdg-screensaver or xset not available; screensaver suspension disabled.\n");
+      return false;
+   }
+   return true;
+}
 
 static void xdg_screensaver_inhibit(Window wnd)
 {
@@ -312,6 +330,14 @@ bool x11_suspend_screensaver(void *data, bool enable)
     {
        if (xdg_screensaver_available)
        {
+          static bool probed = false;
+          if (!probed)
+          {
+             xdg_screensaver_available = xdg_screensaver_probe();
+             probed = true;
+          }
+          if (!xdg_screensaver_available)
+             return true;
           xdg_screensaver_inhibit(wnd);
           return xdg_screensaver_available;
        }
