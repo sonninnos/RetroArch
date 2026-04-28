@@ -151,6 +151,15 @@
 #define MUI_BATTERY_PERCENT_MAX_LENGTH 12
 #define MUI_TIMEDATE_MAX_LENGTH        255
 
+/* Maximum number of playlist tabs whose last-selected
+ * entry index can be cached in mui->playlist_selection[].
+ * Indexed by the user's row in the playlists tab.  Power
+ * users with many cores can have hundreds of playlists --
+ * 1024 covers any plausible setup with comfortable margin
+ * while still bounding mui's heap footprint to ~8 KB for
+ * this cache. */
+#define MUI_PLAYLIST_SELECTION_MAX 1024
+
 /* Allow force enabling secondary thumbnail */
 #define MUI_FORCE_ENABLE_SECONDARY 0
 
@@ -677,7 +686,7 @@ typedef struct materialui_handle
    uint32_t flags;
    uint32_t context_generation;
 
-   size_t playlist_selection[NAME_MAX_LENGTH];
+   size_t playlist_selection[MUI_PLAYLIST_SELECTION_MAX];
    size_t playlist_selection_ptr;
    uint8_t mainmenu_selection_ptr;
    uint8_t settings_selection_ptr;
@@ -3742,28 +3751,36 @@ static bool materialui_render_process_entry_playlist_desktop(
             if (!last_played_str || !*last_played_str)
                last_played_str = mui->status_bar.last_played_fallback_str;
 
-            /* Generate metadata string */
-            _len  = strlcpy(mui->status_bar.str,
-                  msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PLAYLIST_SUBLABEL_CORE),
-                  sizeof(mui->status_bar.str));
-            _len += strlcpy(mui->status_bar.str + _len,
-                    " ",
-                    sizeof(mui->status_bar.str) - _len);
-            _len += strlcpy(mui->status_bar.str + _len,
-                    core_name,
-                    sizeof(mui->status_bar.str) - _len);
-            _len += strlcpy(mui->status_bar.str + _len,
-                    MUI_TICKER_SPACER,
-                    sizeof(mui->status_bar.str) - _len);
-            _len += strlcpy(mui->status_bar.str + _len,
-                    runtime_str,
-                    sizeof(mui->status_bar.str) - _len);
-            _len += strlcpy(mui->status_bar.str + _len,
-                    MUI_TICKER_SPACER,
-                    sizeof(mui->status_bar.str) - _len);
-            strlcpy(mui->status_bar.str + _len,
-                  last_played_str,
-                  sizeof(mui->status_bar.str) - _len);
+            /* Generate metadata string.
+             *
+             * Pre-conversion this used the unsafe pattern
+             *   _len += strlcpy(buf + _len, src, sizeof(buf) - _len)
+             * which is NOT self-bounding: strlcpy returns
+             * strlen(src), not bytes-actually-written, so on a
+             * truncating call (long core_name from a crafted
+             * playlist entry, long runtime / last-played strings,
+             * verbose locale, ...) _len overshoots
+             * sizeof(status_bar.str), the next len-_len subtraction
+             * underflows size_t to ~SIZE_MAX, and the subsequent
+             * strlcpy treats the destination as essentially
+             * infinite.  Adjacent struct fields
+             * (runtime_fallback_str, last_played_fallback_str,
+             * ...) get corrupted on the heap. */
+            _len = 0;
+            strlcpy_append(mui->status_bar.str, sizeof(mui->status_bar.str),
+                  &_len, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_PLAYLIST_SUBLABEL_CORE));
+            strlcpy_append(mui->status_bar.str, sizeof(mui->status_bar.str),
+                  &_len, " ");
+            strlcpy_append(mui->status_bar.str, sizeof(mui->status_bar.str),
+                  &_len, core_name);
+            strlcpy_append(mui->status_bar.str, sizeof(mui->status_bar.str),
+                  &_len, MUI_TICKER_SPACER);
+            strlcpy_append(mui->status_bar.str, sizeof(mui->status_bar.str),
+                  &_len, runtime_str);
+            strlcpy_append(mui->status_bar.str, sizeof(mui->status_bar.str),
+                  &_len, MUI_TICKER_SPACER);
+            strlcpy_append(mui->status_bar.str, sizeof(mui->status_bar.str),
+                  &_len, last_played_str);
 
             /* All metadata is cached */
             mui->flags |= MUI_FLAG_STATUSBAR_CACHED;
@@ -9414,7 +9431,14 @@ static void materialui_navigation_set(void *data, bool scroll)
       return;
 
    if (mui->flags & MUI_FLAG_IS_PLAYLIST)
-      mui->playlist_selection[mui->playlist_selection_ptr] = selection;
+   {
+      /* Bound playlist_selection_ptr against the cache size:
+       * users with > MUI_PLAYLIST_SELECTION_MAX playlists would
+       * otherwise OOB-write into adjacent struct fields when
+       * navigating any deep playlist. */
+      if (mui->playlist_selection_ptr < MUI_PLAYLIST_SELECTION_MAX)
+         mui->playlist_selection[mui->playlist_selection_ptr] = selection;
+   }
    else if (mui->flags & MUI_FLAG_IS_PLAYLISTS_TAB)
       mui->playlist_selection_ptr = selection;
    else if (string_is_equal(mui->menu_title, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_MAIN_MENU)))
@@ -9830,8 +9854,9 @@ static void materialui_populate_entries(void *data, const char *path,
    if (     mui->flags & MUI_FLAG_IS_PLAYLIST
          && !string_is_equal(label, MENU_ENUM_LABEL_LOAD_CONTENT_HISTORY_STR))
    {
-      if (     remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
+      if (     (remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_PLAYLISTS)
+            && mui->playlist_selection_ptr < MUI_PLAYLIST_SELECTION_MAX)
          menu_state_get_ptr()->selection_ptr = mui->playlist_selection[mui->playlist_selection_ptr];
    }
    else if (mui->flags & MUI_FLAG_IS_PLAYLISTS_TAB)
@@ -11112,9 +11137,21 @@ static int materialui_pointer_up(void *userdata,
                }
 
                /* Get node (entry) associated with current
-                * pointer item */
+                * pointer item.
+                *
+                * Bound-check ptr against the live list->size:
+                * ptr was set by the render-frame hit-test loop,
+                * which guarantees ptr < entries_end at the point
+                * it ran -- but the list can be repopulated (search
+                * filter, navigation, async list rebuild) before
+                * this event handler executes, leaving ptr stale
+                * and possibly past the new list end.  The
+                * LONG_PRESS case below and the swipe handler at
+                * materialui_pointer_up_swipe_horz_default already
+                * guard with `ptr < entries_end`; mirror that
+                * defence here. */
                list = menu_list ? MENU_LIST_GET_SELECTION(menu_list, 0) : NULL;
-               if (!list)
+               if (!list || ptr >= list->size)
                   break;
 
                if (!(node = (materialui_node_t*)list->list[ptr].userdata))
