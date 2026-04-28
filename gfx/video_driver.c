@@ -3189,10 +3189,13 @@ size_t video_driver_get_window_title(char *s, size_t len)
    video_driver_state_t *video_st = &video_driver_st;
    if (s && (video_st->flags & VIDEO_FLAG_WINDOW_TITLE_UPDATE))
    {
-      strlcpy(s, video_st->window_title, len);
+      size_t n = strlcpy(s, video_st->window_title, len);
       video_st->flags &= ~VIDEO_FLAG_WINDOW_TITLE_UPDATE;
+      if (n >= len)
+         return len ? len - 1 : 0;
+      return n;
    }
-   return video_st->window_title_len;
+   return 0;
 }
 
 void video_driver_update_title(void *data)

@@ -2764,14 +2764,16 @@ static int create_string_list_rdb_entry_string(
 {
    char tmp[128];
    char out_lbl[NAME_MAX_LENGTH];
-   size_t _len     = strlcpy(out_lbl, label, sizeof(out_lbl));
-   _len           += strlcpy(out_lbl + _len, "|", sizeof(out_lbl) - _len);
-   _len           += strlcpy(out_lbl + _len, actual_string, sizeof(out_lbl) - _len);
-   _len           += strlcpy(out_lbl + _len, "|", sizeof(out_lbl) - _len);
-   strlcpy(out_lbl + _len, path, sizeof(out_lbl) - _len);
-   _len           = strlcpy(tmp, desc, sizeof(tmp));
-   _len          += strlcpy(tmp + _len, ": ", sizeof(tmp) - _len);
-   strlcpy(tmp + _len, actual_string, sizeof(tmp) - _len);
+   size_t _len = 0;
+   strlcpy_append(out_lbl, sizeof(out_lbl), &_len, label);
+   strlcpy_append(out_lbl, sizeof(out_lbl), &_len, "|");
+   strlcpy_append(out_lbl, sizeof(out_lbl), &_len, actual_string);
+   strlcpy_append(out_lbl, sizeof(out_lbl), &_len, "|");
+   strlcpy_append(out_lbl, sizeof(out_lbl), &_len, path);
+   _len = 0;
+   strlcpy_append(tmp, sizeof(tmp), &_len, desc);
+   strlcpy_append(tmp, sizeof(tmp), &_len, ": ");
+   strlcpy_append(tmp, sizeof(tmp), &_len, actual_string);
    menu_entries_append(list, tmp, out_lbl,
          enum_idx,
          0, 0, 0, NULL);

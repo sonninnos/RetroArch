@@ -1116,37 +1116,37 @@ bool command_get_status(command_t *cmd, const char* arg)
 
       core_info_get_current_core(&core_info);
 
-      _len = strlcpy(reply, "GET_STATUS ", sizeof(reply));
+      _len = 0;
+      strlcpy_append(reply, sizeof(reply), &_len, "GET_STATUS ");
 
       if (runloop_st->flags & RUNLOOP_FLAG_PAUSED)
-         _len += strlcpy(reply + _len, "PAUSED", sizeof(reply) - _len);
+         strlcpy_append(reply, sizeof(reply), &_len, "PAUSED");
       else
-         _len += strlcpy(reply + _len, "PLAYING", sizeof(reply) - _len);
+         strlcpy_append(reply, sizeof(reply), &_len, "PLAYING");
 
-      _len += strlcpy(reply + _len, " ", sizeof(reply) - _len);
+      strlcpy_append(reply, sizeof(reply), &_len, " ");
 
       if (core_info && core_info->system_id)
-         _len += strlcpy(reply + _len, core_info->system_id,
-               sizeof(reply) - _len);
+         strlcpy_append(reply, sizeof(reply), &_len, core_info->system_id);
       else if (runloop_st->system.info.library_name)
-         _len += strlcpy(reply + _len, runloop_st->system.info.library_name,
-               sizeof(reply) - _len);
+         strlcpy_append(reply, sizeof(reply), &_len,
+               runloop_st->system.info.library_name);
       else
-         _len += strlcpy(reply + _len, "UNKNOWN", sizeof(reply) - _len);
+         strlcpy_append(reply, sizeof(reply), &_len, "UNKNOWN");
 
-      _len += strlcpy(reply + _len, ",", sizeof(reply) - _len);
+      strlcpy_append(reply, sizeof(reply), &_len, ",");
 
       basename_path = path_get(RARCH_PATH_BASENAME);
       if (basename_path)
       {
          const char *basename = path_basename(basename_path);
          if (basename)
-            _len += strlcpy(reply + _len, basename, sizeof(reply) - _len);
+            strlcpy_append(reply, sizeof(reply), &_len, basename);
          else
-            _len += strlcpy(reply + _len, "UNKNOWN", sizeof(reply) - _len);
+            strlcpy_append(reply, sizeof(reply), &_len, "UNKNOWN");
       }
       else
-         _len += strlcpy(reply + _len, "UNKNOWN", sizeof(reply) - _len);
+         strlcpy_append(reply, sizeof(reply), &_len, "UNKNOWN");
 
       _len += snprintf(reply + _len, sizeof(reply) - _len,
             ",crc32=%lx\n", (unsigned long)content_get_crc());

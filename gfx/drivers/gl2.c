@@ -4548,16 +4548,15 @@ static void *gl2_init(const video_info_t *video,
 
       if (vendor && *vendor)
       {
-        _len                   = strlcpy(gl->device_str, vendor, sizeof(gl->device_str));
-        gl->device_str[  _len]  = ' ';
-        gl->device_str[++_len]  = '\0';
+         strlcpy_append(gl->device_str, sizeof(gl->device_str), &_len, vendor);
+         strlcpy_append(gl->device_str, sizeof(gl->device_str), &_len, " ");
       }
 
       if (renderer && *renderer)
-        strlcpy(gl->device_str + _len, renderer, sizeof(gl->device_str) - _len);
+         strlcpy_append(gl->device_str, sizeof(gl->device_str), &_len, renderer);
 
       if (version && *version)
-        video_driver_set_gpu_api_version_string(version);
+         video_driver_set_gpu_api_version_string(version);
    }
 
 #ifdef _WIN32
