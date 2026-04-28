@@ -139,3 +139,36 @@ jobs:
           test -x slang_texture_index_bounds_test
           timeout 60 ./slang_texture_index_bounds_test
           echo "[pass] slang_texture_index_bounds_test"
+
+      - name: Build and run vulkan_mailbox_init_leak_test (ASan + LSan)
+        shell: bash
+        working-directory: samples/gfx/vulkan_mailbox_init_leak
+        run: |
+          set -eu
+          # Regression test for the partial-init leak fix in
+          # gfx/common/vulkan_common.c::vulkan_emulated_mailbox_init.
+          # Pre-fix the function had three sequential allocations
+          # (scond_new, slock_new, sthread_create) and on any of the
+          # latter two failures returned `false` directly, leaking
+          # the already-allocated cond and/or lock.  Both production
+          # call sites in vulkan_create_swapchain ignore the return
+          # value, so an init failure also left vk->mailbox.lock ==
+          # NULL and vk->mailbox.cond == NULL while VK_DATA_FLAG_
+          # EMULATING_MAILBOX was still set, setting up a NULL-deref
+          # the next time vulkan_acquire_next_image routed into
+          # vulkan_emulated_mailbox_acquire_next_image (slock_lock
+          # on a NULL pointer).  Fix routes every early failure
+          # through `goto error` to a single deinit call, which is
+          # null-safe and ends with a memset, leaving the struct in
+          # the same shape the deinit-on-shutdown path produces and
+          # tripping the existing `mailbox.swapchain == VK_NULL_
+          # HANDLE` guard at vulkan_acquire_next_image.  Build under
+          # AddressSanitizer with leak detection so any
+          # reintroduction is caught at the leak level.  If
+          # vulkan_common.c amends the init or deinit, the verbatim
+          # copies in vulkan_mailbox_init_leak_test.c must follow.
+          make clean all SANITIZER=address
+          test -x vulkan_mailbox_init_leak_test
+          ASAN_OPTIONS=detect_leaks=1 timeout 60 \
+             ./vulkan_mailbox_init_leak_test
+          echo "[pass] vulkan_mailbox_init_leak_test"

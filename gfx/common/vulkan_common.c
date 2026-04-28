@@ -265,13 +265,26 @@ static bool vulkan_emulated_mailbox_init(
    mailbox->flags               = 0;
 
    if (!(mailbox->cond      = scond_new()))
-      return false;
+      goto error;
    if (!(mailbox->lock      = slock_new()))
-      return false;
+      goto error;
    if (!(mailbox->thread    = sthread_create(vulkan_emulated_mailbox_loop,
                mailbox)))
-      return false;
+      goto error;
    return true;
+
+error:
+   /* Tear down anything we managed to allocate before failing.
+    * vulkan_emulated_mailbox_deinit() is null-safe and ends with
+    * a memset, so the struct is left in the same shape a caller
+    * would see after a successful init+deinit cycle -- callers
+    * that ignore our return value (the two sites in
+    * vulkan_create_swapchain) will then take the
+    * mailbox.swapchain == VK_NULL_HANDLE branch in
+    * vulkan_acquire_next_image and skip the emulated path
+    * cleanly instead of dereferencing a NULL lock/cond. */
+   vulkan_emulated_mailbox_deinit(mailbox);
+   return false;
 }
 
 static void vulkan_debug_mark_object(VkDevice device,
