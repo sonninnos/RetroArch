@@ -640,7 +640,20 @@ const char* xmb_theme_ident(void)
 }
 
 /* NOTE: This exists because calloc()ing xmb_node_t is expensive
- * when you can have big lists like MAME and fba playlists */
+ * when you can have big lists like MAME and fba playlists.
+ *
+ * Per-field init only — DO NOT add a wholesale memset of the
+ * thumbnail_path_data substruct here, that's the multi-KB block
+ * we're explicitly avoiding zeroing on the hot path.  Only the
+ * small `gfx_thumbnail_t icon` substruct and the icon_path's
+ * first byte must be zero, because:
+ *   - xmb_free_node -> gfx_thumbnail_reset reads `texture` and
+ *     `flags` before initializing them; uninit `texture != 0`
+ *     would feed garbage to video_driver_texture_unload, and
+ *     uninit `flags & FADE_ACTIVE` would call
+ *     gfx_animation_kill_by_tag on stale state.
+ *   - The lazy thumbnail path resolution in xmb_render reads
+ *     `icon_path[0]` to decide whether resolution is needed. */
 static xmb_node_t *xmb_alloc_node(void)
 {
    xmb_node_t *node = (xmb_node_t*)malloc(sizeof(*node));
@@ -651,7 +664,9 @@ static xmb_node_t *xmb_alloc_node(void)
    node->alpha        = node->label_alpha  = 0;
    node->zoom         = node->x = node->y  = 0;
    node->icon         = node->content_icon = 0;
-   node->thumbnail_icon.icon.texture       = 0;
+   memset(&node->thumbnail_icon.icon, 0,
+         sizeof(node->thumbnail_icon.icon));
+   node->thumbnail_icon.thumbnail_path_data.icon_path[0] = '\0';
    node->fullpath     = NULL;
    node->console_name = NULL;
 
@@ -3153,9 +3168,14 @@ static void xmb_refresh_horizontal_list(xmb_handle_t *xmb)
 
    xmb_context_destroy_horizontal_list(xmb);
 
+   /* Free the db_node_map BEFORE the nodes it borrows from.
+    * The map's values are non-owning pointers into the
+    * horizontal_list's userdata slots, so once those slots are
+    * free()d the map's stored pointers are dangling.  Reverse
+    * the order to keep the dangling-pointer window closed. */
+   RHMAP_FREE(xmb->playlist_db_node_map);
    xmb_free_list_nodes(&xmb->horizontal_list, false);
    file_list_deinitialize(&xmb->horizontal_list);
-   RHMAP_FREE(xmb->playlist_db_node_map);
 
    menu_st->flags |=  MENU_ST_FLAG_PREVENT_POPULATE;
 
@@ -4445,7 +4465,8 @@ static bool xmb_animation_line_ticker(gfx_animation_t *p_anim, gfx_animation_ctx
       return false;
    if (    (!line_ticker->str || !*line_ticker->str)
        || (line_ticker->line_len  < 1)
-       || (line_ticker->max_lines < 1))
+       || (line_ticker->max_lines < 1)
+       || (line_ticker->len       < 1))
       goto end;
 
    /* Line wrap input string */
@@ -5023,7 +5044,8 @@ static bool xmb_animation_line_ticker_smooth(gfx_animation_t *p_anim, gfx_animat
          bottom_fade_line_index %= num_lines;
       }
 
-      if (top_fade_line_index < num_lines)
+      if (top_fade_line_index < num_lines
+            && line_ticker->top_fade_str_len > 0)
       {
          size_t copy_len = line_lengths[top_fade_line_index];
          if (copy_len >= line_ticker->top_fade_str_len)
@@ -5033,7 +5055,8 @@ static bool xmb_animation_line_ticker_smooth(gfx_animation_t *p_anim, gfx_animat
          line_ticker->top_fade_str[copy_len] = '\0';
       }
 
-      if (bottom_fade_line_index < num_lines)
+      if (bottom_fade_line_index < num_lines
+            && line_ticker->bottom_fade_str_len > 0)
       {
          size_t copy_len = line_lengths[bottom_fade_line_index];
          if (copy_len >= line_ticker->bottom_fade_str_len)
@@ -9534,9 +9557,12 @@ static void *xmb_init(void **userdata, bool video_is_threaded)
 error:
    free(menu);
 
+   /* See comment in xmb_refresh_horizontal_list: the map's
+    * values are non-owning pointers into the horizontal_list,
+    * so it must be freed before the nodes are. */
+   RHMAP_FREE(xmb->playlist_db_node_map);
    xmb_free_list_nodes(&xmb->horizontal_list, false);
    file_list_deinitialize(&xmb->horizontal_list);
-   RHMAP_FREE(xmb->playlist_db_node_map);
    return NULL;
 }
 
@@ -9551,9 +9577,11 @@ static void xmb_free(void *data)
       xmb_icon_load_gen++;
       xmb_ctx_icon_load_gen++;
 
+      /* See comment in xmb_refresh_horizontal_list: free the
+       * db_node_map before the nodes its values point into. */
+      RHMAP_FREE(xmb->playlist_db_node_map);
       xmb_free_list_nodes(&xmb->horizontal_list, false);
       file_list_deinitialize(&xmb->horizontal_list);
-      RHMAP_FREE(xmb->playlist_db_node_map);
 
       video_coord_array_free(&xmb->raster_block.carr);
       video_coord_array_free(&xmb->raster_block2.carr);
@@ -10038,7 +10066,6 @@ static bool xmb_menu_init_list(void *data)
    menu_displaylist_info_init(&info);
 
    info.label                 = strdup(msg_hash_to_str(MENU_ENUM_LABEL_MAIN_MENU));
-   info.exts                  = strldup("lpl", sizeof("lpl"));
    info.type_default          = FILE_TYPE_PLAIN;
    info.enum_idx              = MENU_ENUM_LABEL_MAIN_MENU;
 
