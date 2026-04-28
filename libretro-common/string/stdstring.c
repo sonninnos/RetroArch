@@ -495,9 +495,15 @@ char* string_tokenize(char **str, const char *delim)
    if (!(token = (char *)malloc((_len + 1) * sizeof(char))))
       return NULL;
 
-   /* Copy token */
+   /* Copy token.  strlcpy already NUL-terminates within the
+    * `_len + 1` byte limit -- _len is bounded above by
+    * strlen(str_ptr) (computed at lines 489-492), so the
+    * terminator lands exactly at token[_len] without needing
+    * a separate write here.  The redundant token[_len] = '\0'
+    * also tripped -Wstringop-overflow under some gcc
+    * configurations (the analyser couldn't constrain _len
+    * relative to the malloc'd size). */
    strlcpy(token, str_ptr, (_len + 1) * sizeof(char));
-   token[_len] = '\0';
    /* Update input string pointer */
    *str = delim_ptr ? delim_ptr + delim_len : NULL;
    return token;
