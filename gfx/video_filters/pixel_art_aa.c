@@ -171,3 +171,9 @@ static const struct softfilter_implementation paa_impl = {
 const struct softfilter_implementation *softfilter_get_implementation(softfilter_simd_mask_t simd) {
    return &paa_impl;
 }
+
+#ifdef RARCH_INTERNAL
+#undef softfilter_get_implementation
+#undef softfilter_thread_data
+#undef filter_data
+#endif
