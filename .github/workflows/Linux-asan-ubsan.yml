@@ -1,0 +1,170 @@
+name: CI Linux ASan + UBSan [No Menu]
+
+# Builds full RetroArch with -fsanitize=address,undefined and runs
+# headless smoke invocations (--help, --features) so AddressSanitizer
+# and UndefinedBehaviorSanitizer instrument the startup config-loading,
+# argument parsing, default-driver init, and cleanup-on-exit paths.
+#
+# The per-sample tests under .github/workflows/Linux-samples-gfx.yml,
+# Linux-samples-tasks.yml, and Linux-libretro-{db,common}-samples.yml
+# regression-test specific predicates that previously had bugs.  This
+# job is complementary -- it covers everything those harnesses can't
+# reach because the code only runs from main(), and catches future
+# heap-corruption / UB regressions across the whole code base for
+# free as a side effect of any change that can be exercised by a
+# headless run.
+#
+# Build configuration matches Linux-Headless.yml (--disable-menu) with
+# additional --disable-discord --disable-cheevos --disable-networking
+# to shrink the third-party surface on this first iteration.  Each can
+# be re-enabled once the baseline is green.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
+jobs:
+  asan-ubsan:
+    name: Build with ASan+UBSan and run headless smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Install dependencies
+        # Mirrors Linux-Headless.yml's apt set so the build matches a
+        # known-good headless configuration.  No sanitizer-specific
+        # packages required; libasan / libubsan ship with the gcc that
+        # ubuntu-latest has installed by default.
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential \
+            libxkbcommon-dev libx11-xcb-dev \
+            zlib1g-dev libfreetype6-dev \
+            libegl1-mesa-dev libgles2-mesa-dev libgbm-dev \
+            nvidia-cg-toolkit nvidia-cg-dev \
+            libavcodec-dev libsdl2-dev libsdl-image1.2-dev \
+            libxml2-dev yasm
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure (no menu, no discord/cheevos/networking)
+        # Trim the build surface for the first iteration so any
+        # sanitizer hit is a RetroArch-internal bug rather than noise
+        # from a vendored third-party subsystem.  The disabled
+        # subsystems will be re-enabled in follow-up patches as the
+        # baseline stays green.
+        run: |
+          ./configure \
+            --disable-menu \
+            --disable-discord \
+            --disable-cheevos \
+            --disable-networking
+
+      - name: Build with -fsanitize=address,undefined
+        # The top-level Makefile (line 153) propagates SANITIZER into
+        # CFLAGS / CXXFLAGS / LDFLAGS for every translation unit and
+        # the final link.  ASan defaults to abort-on-heap-corruption;
+        # UBSan recovery is controlled at runtime via UBSAN_OPTIONS
+        # (see the smoke-run steps below).
+        run: |
+          make -j$(getconf _NPROCESSORS_ONLN) \
+            SANITIZER=address,undefined
+          test -x retroarch
+          file retroarch
+
+      - name: Smoke run --help (ASan strict, UBSan soft-fail)
+        # `--help` exits cleanly via exit(0) after printing the usage
+        # banner.  Coverage scope: libc init, main(), frontend
+        # driver bootstrap, argv duplication, the getopt walk over
+        # the full option table, and retroarch_print_help() itself.
+        # Doesn't reach into core loading / video init / cleanup-on-
+        # shutdown -- a follow-up step running with --max-frames=N
+        # against a noop core will extend coverage to the full
+        # lifecycle.  ASan runs in abort-on-error mode so any heap
+        # corruption fails the job; UBSan reports stacktraces but
+        # does not fail (first iteration -- we want to see the
+        # baseline before deciding which UBSan classes to enforce).
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0:print_stacktrace=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+          # Avoid noise from libGL / Mesa / Wayland symbol-resolution
+          # leaks at process shutdown; those are not RetroArch bugs.
+          LSAN_OPTIONS: exitcode=0
+        run: |
+          set -eu
+          timeout 30 ./retroarch --help > /tmp/help.out 2> /tmp/help.err || rc=$?
+          echo "exit=${rc:-0}"
+          echo "=== stdout (head) ==="
+          head -40 /tmp/help.out
+          echo "=== stderr ==="
+          cat /tmp/help.err
+          # ASan abort_on_error sends the process to exit code 1 + a
+          # SUMMARY: line on stderr.  Treat any "AddressSanitizer:"
+          # marker as fatal regardless of exit code.
+          if grep -q "AddressSanitizer:" /tmp/help.err; then
+            echo "[FAIL] AddressSanitizer reported a finding"
+            exit 1
+          fi
+          echo "[pass] retroarch --help under ASan+UBSan"
+
+      - name: Smoke run --features (ASan strict, UBSan soft-fail)
+        # `--features` exits cleanly via exit(0) after printing the
+        # compile-time feature list.  Coverage scope is the same as
+        # --help (libc init / main / frontend bootstrap / arg parse)
+        # plus retroarch_print_features(), which walks the static
+        # video / audio / input / camera / location / record / cheats
+        # / network / database / overlay / hid feature tables.  Each
+        # such walk reads pointers into a static-string table -- low
+        # corruption surface but a useful sanity check that the link-
+        # time feature flags resolve consistently.  Doesn't reach
+        # core loading or cleanup-on-shutdown.
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0:print_stacktrace=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+          LSAN_OPTIONS: exitcode=0
+        run: |
+          set -eu
+          timeout 30 ./retroarch --features > /tmp/features.out 2> /tmp/features.err || rc=$?
+          echo "exit=${rc:-0}"
+          echo "=== stdout (head) ==="
+          head -40 /tmp/features.out
+          echo "=== stderr ==="
+          cat /tmp/features.err
+          if grep -q "AddressSanitizer:" /tmp/features.err; then
+            echo "[FAIL] AddressSanitizer reported a finding"
+            exit 1
+          fi
+          echo "[pass] retroarch --features under ASan+UBSan"
+
+      - name: Summarize UBSan baseline
+        # Both runtime steps are non-fatal on UBSan diagnostics.  This
+        # step prints a count of distinct UBSan messages observed so
+        # follow-up patches have a numerical target to drive to zero.
+        # If this step ever shows zero, flip
+        # UBSAN_OPTIONS=halt_on_error=1 in the runtime steps above to
+        # enforce the clean baseline.
+        if: always()
+        run: |
+          set +e
+          ub_count=$( {
+            grep -h "runtime error:" /tmp/help.err /tmp/features.err 2>/dev/null
+          } | sort -u | wc -l)
+          echo "UBSan distinct diagnostics: ${ub_count}"
+          if [ "${ub_count}" != "0" ]; then
+            echo "=== unique UBSan diagnostics ==="
+            grep -h "runtime error:" /tmp/help.err /tmp/features.err 2>/dev/null \
+              | sort -u
+          fi
