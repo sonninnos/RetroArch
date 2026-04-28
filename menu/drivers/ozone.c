@@ -4632,8 +4632,22 @@ static ozone_node_t *ozone_copy_node(const ozone_node_t *old_node)
       return NULL;
 
    *new_node              = *old_node;
+   /* Deep-copy heap-owned strings.  Bitwise copy above aliased
+    * the source pointers, so without a strdup here both the
+    * source and the copy free() the same buffers in their
+    * respective ozone_free_node() — double free.
+    *
+    * console_name is currently only populated on horizontal_list
+    * entries (sidebar playlist tabs) which never reach
+    * ozone_copy_node today (it's called from ozone_list_deep_copy
+    * on the vertical selection_buf), so the bug is latent.  The
+    * struct comment above ozone_node already warned that any
+    * change to ozone_node must update this function. */
    new_node->fullpath     = old_node->fullpath
          ? strdup(old_node->fullpath)
+         : NULL;
+   new_node->console_name = old_node->console_name
+         ? strdup(old_node->console_name)
          : NULL;
 
    return new_node;
@@ -5254,9 +5268,13 @@ static void ozone_refresh_horizontal_list(ozone_handle_t *ozone,
    struct menu_state *menu_st = menu_state_get_ptr();
 
    ozone_context_destroy_horizontal_list(ozone);
+   /* Free the db_node_map BEFORE the nodes it borrows from.
+    * The map's values are non-owning pointers into the
+    * horizontal_list's userdata slots, so once those slots are
+    * free()d the map's stored pointers are dangling. */
+   RHMAP_FREE(ozone->playlist_db_node_map);
    ozone_free_list_nodes(&ozone->horizontal_list, false);
    file_list_deinitialize(&ozone->horizontal_list);
-   RHMAP_FREE(ozone->playlist_db_node_map);
 
    menu_st->flags                 |=  MENU_ST_FLAG_PREVENT_POPULATE;
 
@@ -9413,11 +9431,13 @@ static void *ozone_init(void **userdata, bool video_is_threaded)
 error:
    if (ozone)
    {
+      /* See comment in ozone_refresh_horizontal_list: free
+       * db_node_map before the nodes its values point into. */
+      RHMAP_FREE(ozone->playlist_db_node_map);
       ozone_free_list_nodes(&ozone->horizontal_list, false);
       ozone_free_list_nodes(&ozone->selection_buf_old, false);
       file_list_deinitialize(&ozone->horizontal_list);
       file_list_deinitialize(&ozone->selection_buf_old);
-      RHMAP_FREE(ozone->playlist_db_node_map);
    }
 
    if (menu)
@@ -9444,11 +9464,13 @@ static void ozone_free(void *data)
       video_coord_array_free(&ozone->fonts.entries_sublabel.raster_block.carr);
       video_coord_array_free(&ozone->fonts.sidebar.raster_block.carr);
 
+      /* See comment in ozone_refresh_horizontal_list: free
+       * db_node_map before the nodes its values point into. */
+      RHMAP_FREE(ozone->playlist_db_node_map);
       ozone_free_list_nodes(&ozone->selection_buf_old, false);
       ozone_free_list_nodes(&ozone->horizontal_list, false);
       file_list_deinitialize(&ozone->selection_buf_old);
       file_list_deinitialize(&ozone->horizontal_list);
-      RHMAP_FREE(ozone->playlist_db_node_map);
 
       if (ozone->pending_message && *ozone->pending_message)
          free(ozone->pending_message);
@@ -13033,7 +13055,6 @@ static bool ozone_menu_init_list(void *data)
    menu_displaylist_info_init(&info);
 
    info.label                   = strdup(MENU_ENUM_LABEL_MAIN_MENU_STR);
-   info.exts                    = strldup("lpl", sizeof("lpl"));
    info.type_default            = FILE_TYPE_PLAIN;
    info.enum_idx                = MENU_ENUM_LABEL_MAIN_MENU;
 
