@@ -33,6 +33,18 @@ jobs:
       - name: Build and run samples
         shell: bash
         working-directory: libretro-common/samples
+        env:
+          # Build samples under AddressSanitizer + UndefinedBehaviorSanitizer.
+          # Most overflow tests under libretro-common/samples (rpng_chunk_
+          # overflow_test, rbmp_test, vfs_read_overflow_test, cdrom_cuesheet
+          # _overflow_test, cdfs_dir_record_test, chd_meta_overflow_test, ...)
+          # use ASan as the regression discriminator for the bound-check
+          # they verify, so make ASan the default for this workflow.  Each
+          # test's Makefile honours SANITIZER= via the conventional opt-in
+          # block (matching samples/tasks/http/Makefile).  Test sources
+          # that don't have the opt-in block treat the variable as
+          # ignored.
+          MAKE_ARGS: "SANITIZER=address,undefined"
         run: |
           set -u
           set -o pipefail
@@ -55,6 +67,8 @@ jobs:
             net_ifinfo
             vfs_read_overflow_test
             cdrom_cuesheet_overflow_test
+            cdfs_dir_record_test
+            chd_meta_overflow_test
             http_parse_test
             rjson_test
             rtga_test
@@ -115,7 +129,7 @@ jobs:
             fi
 
             # Build
-            if ! ( cd "$d" && make clean all ); then
+            if ! ( cd "$d" && make clean all $MAKE_ARGS ); then
               printf '\n::error title=Build failed::%s failed to build\n' "$rel"
               fails=$((fails+1))
               continue
