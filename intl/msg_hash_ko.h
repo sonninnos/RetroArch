@@ -2555,6 +2555,10 @@ MSG_HASH(
    "스캔라인 동기화"
    )
 MSG_HASH(
+   MENU_ENUM_SUBLABEL_VIDEO_SCANLINE_SYNC,
+   "동영상 출력을 스캔라인 위치에 맞춰 동기화합니다. 지연 시간이 줄어들지만 티어링 증상이 발생할 확률이 높아집니다. 수직 동기화가 비활성화되어야 합니다."
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_FRAME_DELAY,
    "프레임 지연"
    )
