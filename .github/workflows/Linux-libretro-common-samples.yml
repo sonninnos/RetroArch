@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y build-essential zlib1g-dev
+          sudo apt-get install -y build-essential zlib1g-dev clang
 
       - name: Checkout
         uses: actions/checkout@v3
@@ -79,6 +79,7 @@ jobs:
             word_wrap_overflow_test
             task_queue_title_error_test
             tpool_wait_test
+            retro_atomic_test
           )
 
           # Per-binary run command (overrides ./<binary> if present).
@@ -194,5 +195,196 @@ jobs:
           printf '  Failed: %d\n' "$fails"
 
           if [[ $fails -gt 0 ]]; then
+            exit 1
+          fi
+
+      - name: Compile-test retro_atomic.h from a C++11 TU
+        shell: bash
+        working-directory: libretro-common
+        run: |
+          # The C++11 backend in retro_atomic.h is a fresh code path that
+          # none of the C samples above exercise.  Compile a tiny inline
+          # C++11 TU against the in-tree header to catch regressions like
+          # accidentally re-introducing an extern "C" wrapper around the
+          # std::atomic include, or breaking the __cplusplus / _MSVC_LANG
+          # gate.  This step is build-and-run, single-threaded only -- the
+          # behavioural SPSC stress is already covered by the C test
+          # binary above on this same host, and the C++11 backend bottoms
+          # out through the same libstdc++ __atomic_* builtins.
+          set -u
+          set -o pipefail
+
+          tmpdir=$(mktemp -d)
+          cat > "$tmpdir/cxx_smoke.cpp" <<'EOF'
+          #include <cstdio>
+          #include <cstddef>
+          #include <retro_atomic.h>
+
+          #if !defined(HAVE_RETRO_ATOMIC) || !defined(RETRO_ATOMIC_LOCK_FREE)
+          #  error "retro_atomic.h: capability flags not set on a C++11 host"
+          #endif
+
+          int main(void) {
+             retro_atomic_int_t  ai;  retro_atomic_int_init(&ai, 0);
+             retro_atomic_size_t as;  retro_atomic_size_init(&as, 0);
+
+             retro_atomic_store_release_int(&ai, 42);
+             retro_atomic_store_release_size(&as, (std::size_t)42);
+
+             int li = retro_atomic_load_acquire_int(&ai);
+             int ls = (int)retro_atomic_load_acquire_size(&as);
+
+             int pi = retro_atomic_fetch_add_int(&ai, 1);
+             int ps = (int)retro_atomic_fetch_add_size(&as, 1);
+
+             retro_atomic_inc_int(&ai);
+             retro_atomic_dec_size(&as);
+
+             int qi = retro_atomic_load_acquire_int(&ai);
+             int qs = (int)retro_atomic_load_acquire_size(&as);
+
+             std::printf("backend: %s\n", RETRO_ATOMIC_BACKEND_NAME);
+
+             bool ok = (li == 42) && (ls == 42)
+                    && (pi == 42) && (ps == 42)
+                    && (qi == 44) && (qs == 42);
+             std::puts(ok ? "ALL OK" : "FAIL");
+             return ok ? 0 : 1;
+          }
+          EOF
+
+          for cxx in g++ clang++; do
+            for std in c++11 c++14 c++17; do
+              echo "==> compile-test with $cxx -std=$std"
+              $cxx -std=$std -Wall -Wextra -pedantic -O2 \
+                  -I include \
+                  "$tmpdir/cxx_smoke.cpp" \
+                  -o "$tmpdir/cxx_smoke" \
+                || { echo "::error title=C++ compile failed::$cxx -std=$std"; exit 1; }
+              "$tmpdir/cxx_smoke" \
+                || { echo "::error title=C++ smoke failed::$cxx -std=$std"; exit 1; }
+            done
+          done
+
+          rm -rf "$tmpdir"
+
+      - name: Run retro_atomic_test under Clang + ThreadSanitizer
+        shell: bash
+        working-directory: libretro-common/samples/atomic/retro_atomic_test
+        run: |
+          # The native samples job above runs with GCC and ASan/UBSan.
+          # Clang is the toolchain on every Apple platform, Android NDK
+          # (since r18), Emscripten, and PS4-ORBIS, so a Clang lane is
+          # not optional coverage.  ThreadSanitizer is the strict
+          # validator for this test in particular: it instruments every
+          # atomic load and store and would flag a missing acquire /
+          # release barrier as a race in the 1M-iteration SPSC stress
+          # (a class of bug that x86 TSO would otherwise hide on the
+          # native runner).
+          set -u
+          set -o pipefail
+
+          make clean
+          CC=clang make all SANITIZER=thread
+
+          TSAN_OPTIONS=halt_on_error=1 ./retro_atomic_test
+
+  # Cross-architecture validation lane for retro_atomic_test.
+  #
+  # The samples job above runs on x86_64, which is a strongly-ordered
+  # (TSO) architecture.  retro_atomic.h's contract is that acquire-load
+  # / release-store / acq_rel-RMW emit real barriers on weakly-ordered
+  # SMP targets (ARM, AArch64, PowerPC, MIPS).  An x86_64 host run
+  # cannot exercise that property, because TSO masks reordering bugs
+  # at the hardware level even when the macros emit no barriers at all.
+  #
+  # This job cross-compiles retro_atomic_test for AArch64 and ARMv7 and
+  # runs the binary under qemu-user-static.  qemu-user emulates the
+  # weak memory model faithfully enough to expose missing-barrier bugs
+  # in the SPSC stress test, and is cheap enough to run on every push.
+  #
+  # We deliberately do NOT run the full samples sweep here -- the rest
+  # of the samples don't have architecture-dependent codegen that
+  # warrants the extra CI time.  retro_atomic_test is the one that
+  # benefits from cross-arch coverage.
+  #
+  # Real ARM hardware still beats qemu (see e.g. PostgreSQL's 2025
+  # Win11/ARM64 atomic ordering bug, found only on real silicon),
+  # but qemu catches most categorical errors and is much cheaper than
+  # provisioning ARM runners.
+  retro-atomic-cross:
+    name: Cross-arch retro_atomic_test (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            cc: aarch64-linux-gnu-gcc
+            apt_pkgs: gcc-aarch64-linux-gnu
+            qemu: qemu-aarch64-static
+            sysroot: /usr/aarch64-linux-gnu
+          - arch: armv7
+            cc: arm-linux-gnueabihf-gcc
+            apt_pkgs: gcc-arm-linux-gnueabihf
+            qemu: qemu-arm-static
+            sysroot: /usr/arm-linux-gnueabihf
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential ${{ matrix.apt_pkgs }} qemu-user-static
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build retro_atomic_test for ${{ matrix.arch }}
+        working-directory: libretro-common/samples/atomic/retro_atomic_test
+        run: |
+          set -u
+          set -o pipefail
+          make clean
+          CC=${{ matrix.cc }} make all
+
+      - name: Run retro_atomic_test under qemu-user
+        working-directory: libretro-common/samples/atomic/retro_atomic_test
+        run: |
+          set -u
+          set -o pipefail
+          ${{ matrix.qemu }} -L ${{ matrix.sysroot }} ./retro_atomic_test
+
+      - name: Inspect emitted atomic instructions
+        working-directory: libretro-common/samples/atomic/retro_atomic_test
+        run: |
+          set -u
+          set -o pipefail
+          # Spot-check the codegen.  If retro_atomic.h were silently
+          # falling through to a no-barrier backend on this arch, the
+          # asm would be conspicuously missing acquire/release
+          # instructions.  This is a cheap sanity check on top of the
+          # behavioural SPSC test above.
+          ${{ matrix.cc }} -O2 -S \
+              -I../../../include -DHAVE_THREADS \
+              retro_atomic_test.c -o /tmp/retro_atomic_test.s
+          echo
+          echo '== Unique barrier-emitting mnemonics =='
+          case "${{ matrix.arch }}" in
+            aarch64)
+              # Expect: ldar, stlr, and __aarch64_ldadd*_acq_rel libcalls
+              # (or inline ldaddal LSE on +lse builds).
+              pattern='\b(ldar|stlr|ldax|stlx|dmb|ldadd[a-z0-9_]*|swp[a-z0-9_]*|__aarch64_(ldadd|swp)[a-z0-9_]*acq_rel)\b'
+              ;;
+            armv7)
+              # Expect: dmb (data memory barrier) and ldrex/strex pairs.
+              pattern='\b(dmb|ldrex|strex|ldrexb|strexb|ldrexh|strexh)\b'
+              ;;
+          esac
+          mnemonics=$(grep -oE "$pattern" /tmp/retro_atomic_test.s | sort -u)
+          echo "$mnemonics"
+          if [[ -z "$mnemonics" ]]; then
+            echo
+            echo '::error title=No barrier instructions emitted::retro_atomic_test.s contains no acquire/release/barrier mnemonics for ${{ matrix.arch }}; retro_atomic.h may have fallen through to a no-barrier backend.'
             exit 1
           fi
