@@ -194,9 +194,7 @@ enum gfx_thumbnail_flags
  * and the main thread (a number of plain transitions during menu
  * processing).  retro_atomic_int_t backs the field with an
  * atomic-typed integer that is safe to read/write through the
- * retro_atomic_*_int API on every supported backend (C11
- * stdatomic, C++11 std::atomic, GCC __atomic_*, MSVC
- * Interlocked, Apple OSAtomic, GCC __sync_*, volatile fallback).
+ * retro_atomic_*_int API on every supported backend.
  *
  * Same size and alignment as plain int on every backend; struct
  * layout is unchanged.  The cost of the acquire/release barriers
@@ -219,7 +217,7 @@ typedef struct
  * memset(t, 0, sizeof(*t)) of a struct containing this type
  * warns under CXX_BUILD's C++ compile (the struct is no longer
  * trivially-copyable per C++11), even though the resulting
- * bytes are identical.  RetroArch's CXX_BUILD mode (Apple, etc.)
+ * bytes are identical.  RetroArch's CXX_BUILD mode
  * compiles every .c file as C++, so this helper is required
  * for clean builds, not just style.
  *
