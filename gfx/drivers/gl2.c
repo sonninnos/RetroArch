@@ -4657,8 +4657,8 @@ static void *gl2_init(const video_info_t *video,
 
    if (temp_width != 0 && temp_height != 0)
       video_driver_set_size(temp_width, temp_height);
-
-   video_driver_get_size(&temp_width, &temp_height);
+   else
+      video_driver_get_size(&temp_width, &temp_height);
    gl->video_width       = temp_width;
    gl->video_height      = temp_height;
 

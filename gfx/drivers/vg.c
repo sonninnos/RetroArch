@@ -197,8 +197,8 @@ static void *vg_init(const video_info_t *video,
             temp_width, temp_height);
       video_driver_set_size(temp_width, temp_height);
    }
-
-   video_driver_get_size(&temp_width, &temp_height);
+   else
+      video_driver_get_size(&temp_width, &temp_height);
 
    vg->mScreenAspect = (float)temp_width / temp_height;
 
