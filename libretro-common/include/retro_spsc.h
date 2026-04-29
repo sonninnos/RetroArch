@@ -174,6 +174,26 @@ bool retro_spsc_init(retro_spsc_t *q, size_t min_capacity);
 void retro_spsc_free(retro_spsc_t *q);
 
 /**
+ * retro_spsc_clear:
+ * @q : The queue.
+ *
+ * Resets head and tail to 0, discarding any unread data.  The
+ * underlying buffer is preserved (no reallocation).
+ *
+ * SAFETY: callable only when both the producer and consumer are
+ * quiesced -- e.g. before either has started, or after both have
+ * stopped.  Concurrent calls with a live producer or consumer are
+ * a data race.  This is the same lifetime constraint as
+ * retro_spsc_init / retro_spsc_free.
+ *
+ * Typical use is when a stream is stopped and restarted (e.g. an
+ * audio driver pausing and resuming, or switching device formats),
+ * and stale buffered data should be discarded before the new
+ * stream begins.
+ */
+void retro_spsc_clear(retro_spsc_t *q);
+
+/**
  * retro_spsc_write_avail:
  * @q : The queue.
  *

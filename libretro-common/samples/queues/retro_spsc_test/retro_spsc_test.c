@@ -222,6 +222,33 @@ static int run_property_checks(void)
       return 1;
    }
 
+   /* clear discards unread data without reallocating buffer */
+   retro_spsc_write(&q, buf, 50);
+   if (retro_spsc_read_avail(&q) != 50)
+   {
+      fprintf(stderr, "FAIL: pre-clear read_avail\n");
+      retro_spsc_free(&q);
+      return 1;
+   }
+   retro_spsc_clear(&q);
+   if (retro_spsc_read_avail(&q) != 0
+         || retro_spsc_write_avail(&q) != 128)
+   {
+      fprintf(stderr, "FAIL: clear did not reset cursors\n");
+      retro_spsc_free(&q);
+      return 1;
+   }
+   /* queue is reusable after clear */
+   retro_spsc_write(&q, buf, 16);
+   memset(readback, 0, sizeof(readback));
+   n = retro_spsc_read(&q, readback, 16);
+   if (n != 16 || memcmp(buf, readback, 16) != 0)
+   {
+      fprintf(stderr, "FAIL: post-clear read mismatch\n");
+      retro_spsc_free(&q);
+      return 1;
+   }
+
    retro_spsc_free(&q);
    printf("[pass] property checks\n");
    return 0;

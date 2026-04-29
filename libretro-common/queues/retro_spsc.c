@@ -75,6 +75,19 @@ void retro_spsc_free(retro_spsc_t *q)
    q->capacity = 0;
 }
 
+void retro_spsc_clear(retro_spsc_t *q)
+{
+   if (!q)
+      return;
+   /* Quiescence is the caller's responsibility (documented).
+    * Under that assumption, no other thread is touching head or
+    * tail, so plain init is correct here -- and necessary, because
+    * plain assignment to a retro_atomic_size_t is illegal under
+    * the C11 stdatomic backend. */
+   retro_atomic_size_init(&q->head, 0);
+   retro_atomic_size_init(&q->tail, 0);
+}
+
 size_t retro_spsc_write_avail(const retro_spsc_t *q)
 {
    /* Producer query.  We read our own head (which we wrote) and the
@@ -110,13 +123,12 @@ size_t retro_spsc_read_avail(const retro_spsc_t *q)
 
 size_t retro_spsc_write(retro_spsc_t *q, const void *data, size_t bytes)
 {
+   size_t mask, head_idx, first;
    const uint8_t *src = (const uint8_t*)data;
-   size_t avail, head, tail, mask, head_idx, first;
-
    /* read tail first to know how much room there is */
-   head = retro_atomic_load_acquire_size(&q->head);
-   tail = retro_atomic_load_acquire_size(&q->tail);
-   avail = q->capacity - (head - tail);
+   size_t head  = retro_atomic_load_acquire_size(&q->head);
+   size_t tail  = retro_atomic_load_acquire_size(&q->tail);
+   size_t avail = q->capacity - (head - tail);
    if (bytes > avail)
       bytes = avail;
    if (bytes == 0)
@@ -141,14 +153,13 @@ size_t retro_spsc_write(retro_spsc_t *q, const void *data, size_t bytes)
 
 size_t retro_spsc_read(retro_spsc_t *q, void *data, size_t bytes)
 {
+   size_t mask, tail_idx, first;
    uint8_t *dst = (uint8_t*)data;
-   size_t avail, head, tail, mask, tail_idx, first;
-
    /* acquire on head pairs with producer's release-store; this is
     * what makes the subsequent memcpys safe to read. */
-   head = retro_atomic_load_acquire_size(&q->head);
-   tail = retro_atomic_load_acquire_size(&q->tail);
-   avail = head - tail;
+   size_t head  = retro_atomic_load_acquire_size(&q->head);
+   size_t tail  = retro_atomic_load_acquire_size(&q->tail);
+   size_t avail = head - tail;
    if (bytes > avail)
       bytes = avail;
    if (bytes == 0)
@@ -171,14 +182,13 @@ size_t retro_spsc_read(retro_spsc_t *q, void *data, size_t bytes)
 
 size_t retro_spsc_peek(const retro_spsc_t *q, void *data, size_t bytes)
 {
+   size_t mask, tail_idx, first;
    uint8_t *dst = (uint8_t*)data;
-   size_t avail, head, tail, mask, tail_idx, first;
-
-   head = retro_atomic_load_acquire_size(
+   size_t head  = retro_atomic_load_acquire_size(
          (retro_atomic_size_t*)&q->head);
-   tail = retro_atomic_load_acquire_size(
+   size_t tail = retro_atomic_load_acquire_size(
          (retro_atomic_size_t*)&q->tail);
-   avail = head - tail;
+   size_t avail = head - tail;
    if (bytes > avail)
       bytes = avail;
    if (bytes == 0)
@@ -187,7 +197,7 @@ size_t retro_spsc_peek(const retro_spsc_t *q, void *data, size_t bytes)
    mask     = q->capacity - 1;
    tail_idx = tail & mask;
 
-   first = q->capacity - tail_idx;
+   first    = q->capacity - tail_idx;
    if (first > bytes)
       first = bytes;
 
