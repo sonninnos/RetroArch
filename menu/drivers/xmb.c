@@ -653,7 +653,12 @@ const char* xmb_theme_ident(void)
  *     uninit `flags & FADE_ACTIVE` would call
  *     gfx_animation_kill_by_tag on stale state.
  *   - The lazy thumbnail path resolution in xmb_render reads
- *     `icon_path[0]` to decide whether resolution is needed. */
+ *     `icon_path[0]` to decide whether resolution is needed.
+ *
+ * gfx_thumbnail_init_blank() (rather than memset) is needed
+ * because gfx_thumbnail_t.status is now atomically-typed; a
+ * memset of a struct containing std::atomic<int> warns under
+ * CXX_BUILD's C++ compile of this file. */
 static xmb_node_t *xmb_alloc_node(void)
 {
    xmb_node_t *node = (xmb_node_t*)malloc(sizeof(*node));
@@ -664,8 +669,7 @@ static xmb_node_t *xmb_alloc_node(void)
    node->alpha        = node->label_alpha  = 0;
    node->zoom         = node->x = node->y  = 0;
    node->icon         = node->content_icon = 0;
-   memset(&node->thumbnail_icon.icon, 0,
-         sizeof(node->thumbnail_icon.icon));
+   gfx_thumbnail_init_blank(&node->thumbnail_icon.icon);
    node->thumbnail_icon.thumbnail_path_data.icon_path[0] = '\0';
    node->fullpath     = NULL;
    node->console_name = NULL;

@@ -205,3 +205,39 @@ jobs:
           test -x vulkan_ctx_double_free_test
           timeout 60 ./vulkan_ctx_double_free_test
           echo "[pass] vulkan_ctx_double_free_test"
+
+      - name: Build and run gfx_thumbnail_status_atomic_test (TSan)
+        shell: bash
+        working-directory: samples/gfx/gfx_thumbnail_status_atomic
+        run: |
+          set -eu
+          # Regression test for the cross-thread thumbnail status
+          # synchronisation in gfx/gfx_thumbnail.c.  The .status
+          # field is read by the video thread (gfx_thumbnail_draw)
+          # and written by the upload-callback thread
+          # (gfx_thumbnail_handle_upload), with a release-store /
+          # acquire-load pairing that guards the texture / width /
+          # height fields published alongside the AVAILABLE
+          # status.  Pre-port the file used a hand-rolled
+          # __atomic_* / _Interlocked / volatile shim.  Post-port
+          # the .status field is retro_atomic_int_t and the
+          # accesses route through retro_atomic_*_int macros.
+          #
+          # ThreadSanitizer is the right validator for this test:
+          # it instruments every atomic load and store and would
+          # flag a missing-barrier regression as a data race, even
+          # on x86 TSO where the hardware otherwise hides the bug.
+          # ASan/UBSan would not catch barrier removal at all
+          # (no out-of-bounds access, no UB).  The test also
+          # carries static-assertion checks that validate the
+          # struct layout invariant (.status size == sizeof(int))
+          # so the field's atomic type does not change the
+          # gfx_thumbnail_t ABI.  If gfx_thumbnail.c amends
+          # GFX_THUMB_STATUS_STORE / GFX_THUMB_STATUS_LOAD or the
+          # .status field type, the verbatim copies in
+          # gfx_thumbnail_status_atomic_test.c must follow.
+          make clean all SANITIZER=thread
+          test -x gfx_thumbnail_status_atomic_test
+          TSAN_OPTIONS=halt_on_error=1 timeout 60 \
+             ./gfx_thumbnail_status_atomic_test
+          echo "[pass] gfx_thumbnail_status_atomic_test"
