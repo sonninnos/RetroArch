@@ -2498,20 +2498,6 @@ bool vulkan_context_init(gfx_ctx_vulkan_data_t *vk,
          int use_mab                      = settings->bools.video_use_metal_arg_buffers;
          setenv("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", use_mab ? "1" : "0", 1);
       }
-      /* MoltenVK 1.3.0 flipped MVK_CONFIG_USE_MTLHEAP to active by default
-       * for all non-AMD GPUs, so VkDeviceMemory now allocates from a
-       * placement MTLHeap.  Placement heaps require macOS 13+ and a GPU
-       * that reports supportsPlacementHeaps; older Intel Macs (Mac GPU
-       * family 2 on macOS 12 and earlier) abort at swapchain-image
-       * allocation time with:
-       *   -[MTLHeapDescriptorInternal validateWithDevice:]:
-       *     failed assertion `Placement heap type is not supported.'
-       * Force the path off here so the assertion can never fire.  The
-       * value "0" is interpreted as boolean-false by 1.2.x and as the
-       * MVK_CONFIG_USE_MTLHEAP_NEVER enum value by 1.3.x, so it is
-       * forward- and backward-compatible.  See libretro/RetroArch#18985. */
-      if (!getenv("MVK_CONFIG_USE_MTLHEAP"))
-         setenv("MVK_CONFIG_USE_MTLHEAP", "0", 1);
       /* Try Vulkan loader first (enables validation layers if installed).
        * Falls back to MoltenVK directly if loader not available. */
       vulkan_library = dylib_load("libvulkan.dylib");
