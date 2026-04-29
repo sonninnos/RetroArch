@@ -2104,14 +2104,23 @@ static void d3d8_make_d3dpp(void *data,
    if (!windowed_enable)
    {
 #ifdef _XBOX
+      /* Xbox: query the actual display size and publish it to
+       * video_st.  Use the same values directly for the d3dpp
+       * back-buffer rather than reading them back via
+       * video_driver_get_size (which would just return what we
+       * just wrote -- nothing else writes video_st->width /
+       * height except the video drivers themselves). */
       unsigned width              = 0;
       unsigned height             = 0;
 
       d3d8_get_video_size(d3d, &width, &height);
       video_driver_set_size(width, height);
-#endif
+      d3dpp->BackBufferWidth      = width;
+      d3dpp->BackBufferHeight     = height;
+#else
       video_driver_get_size(&d3dpp->BackBufferWidth,
             &d3dpp->BackBufferHeight);
+#endif
    }
 
 #ifdef _XBOX
@@ -2481,10 +2490,6 @@ static bool d3d8_init_internal(d3d8_video_t *d3d,
    HMONITOR hm_to_use;
 #endif
    struct video_shader_pass *pass = NULL;
-#ifdef HAVE_WINDOW
-   unsigned win_width        = 0;
-   unsigned win_height       = 0;
-#endif
    unsigned full_x           = 0;
    unsigned full_y           = 0;
    settings_t    *settings   = config_get_ptr();
@@ -2538,18 +2543,20 @@ static bool d3d8_init_internal(d3d8_video_t *d3d,
       unsigned new_width  = info->fullscreen ? full_x : info->width;
       unsigned new_height = info->fullscreen ? full_y : info->height;
       video_driver_set_size(new_width, new_height);
-   }
 
 #ifdef HAVE_WINDOW
-   video_driver_get_size(&win_width, &win_height);
-
-   if (!win32_set_video_mode(d3d, win_width, win_height,
-         info->fullscreen))
-   {
-      RARCH_ERR("[D3D8] win32_set_video_mode failed.\n");
-      return false;
-   }
+      /* Use new_width / new_height directly rather than reading
+       * them back via video_driver_get_size: nothing in the
+       * codebase writes video_st->width / height between the
+       * set_size above and this call except us. */
+      if (!win32_set_video_mode(d3d, new_width, new_height,
+            info->fullscreen))
+      {
+         RARCH_ERR("[D3D8] win32_set_video_mode failed.\n");
+         return false;
+      }
 #endif
+   }
 
    memset(&d3d->shader, 0, sizeof(d3d->shader));
    d3d->shader.passes                    = 1;

@@ -7145,10 +7145,6 @@ static bool d3d9_hlsl_init_internal(d3d9_video_t *d3d,
    MONITORINFOEX current_mon;
    HMONITOR hm_to_use;
 #endif
-#ifdef HAVE_WINDOW
-   unsigned win_width        = 0;
-   unsigned win_height       = 0;
-#endif
    unsigned full_x           = 0;
    unsigned full_y           = 0;
    settings_t    *settings   = config_get_ptr();
@@ -7204,18 +7200,20 @@ static bool d3d9_hlsl_init_internal(d3d9_video_t *d3d,
       unsigned new_width  = info->fullscreen ? full_x : info->width;
       unsigned new_height = info->fullscreen ? full_y : info->height;
       video_driver_set_size(new_width, new_height);
-   }
 
 #ifdef HAVE_WINDOW
-   video_driver_get_size(&win_width, &win_height);
-
-   if (!win32_set_video_mode(d3d, win_width, win_height,
-         info->fullscreen))
-   {
-      RARCH_ERR("[D3D9 HLSL] win32_set_video_mode failed.\n");
-      return false;
-   }
+      /* Use new_width / new_height directly rather than reading
+       * them back via video_driver_get_size: nothing in the
+       * codebase writes video_st->width / height between the
+       * set_size above and this call except us. */
+      if (!win32_set_video_mode(d3d, new_width, new_height,
+            info->fullscreen))
+      {
+         RARCH_ERR("[D3D9 HLSL] win32_set_video_mode failed.\n");
+         return false;
+      }
 #endif
+   }
 
    d3d->video_info = *info;
 
