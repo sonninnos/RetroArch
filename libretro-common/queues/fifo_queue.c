@@ -31,21 +31,7 @@
 
 static bool fifo_initialize_internal(fifo_buffer_t *buf, size_t len)
 {
-   uint8_t *buffer;
-
-   /* The ring reserves one slot to distinguish empty from full,
-    * so the actual allocation is (len + 1) bytes.  Reject @len
-    * values that would wrap that addition: SIZE_MAX would
-    * compute (size_t)0, which calloc(1, 0) is allowed to satisfy
-    * with a non-NULL pointer to a zero-byte allocation.  Letting
-    * that succeed would leave buf->size == 0 and the next
-    * fifo_write would divide by zero at the `% buffer->size`
-    * step.  No current caller asks for SIZE_MAX, so the rejection
-    * is purely defensive. */
-   if (len >= SIZE_MAX)
-      return false;
-
-   buffer = (uint8_t*)calloc(1, len + 1);
+   uint8_t *buffer    = (uint8_t*)calloc(1, len + 1);
 
    if (!buffer)
       return false;
@@ -105,31 +91,8 @@ fifo_buffer_t *fifo_new(size_t len)
 
 void fifo_write(fifo_buffer_t *buffer, const void *in_buf, size_t len)
 {
-   size_t first_write;
+   size_t first_write = len;
    size_t rest_write  = 0;
-   size_t avail;
-
-   /* Cap @len at the available space.  Existing callers all
-    * gate on FIFO_WRITE_AVAIL before invoking us, so this is
-    * a no-op for them; for any caller that doesn't, the
-    * unbounded branch below would walk off the end of
-    * @buffer->buffer (the wrap-around copy at line `memcpy(
-    * buffer->buffer, ..., rest_write)` would write up to
-    * len - first_write bytes into a buffer of @buffer->size
-    * total, overrunning by len - size).  Worse, the original
-    * `buffer->end + len > buffer->size` test wraps in size_t
-    * for huge @len and silently misclassifies the request as
-    * "fits in one chunk", taking the corrupting first memcpy
-    * down a path with no wrap-around bound at all.  Capping
-    * here closes both windows. */
-   avail = FIFO_WRITE_AVAIL(buffer);
-   if (len > avail)
-      len = avail;
-
-   if (!len)
-      return;
-
-   first_write = len;
 
    if (buffer->end + len > buffer->size)
    {
@@ -146,22 +109,8 @@ void fifo_write(fifo_buffer_t *buffer, const void *in_buf, size_t len)
 
 void fifo_read(fifo_buffer_t *buffer, void *in_buf, size_t len)
 {
-   size_t first_read;
+   size_t first_read = len;
    size_t rest_read  = 0;
-   size_t avail;
-
-   /* Same rationale as fifo_write: cap @len at what's actually
-    * available to avoid out-of-buffer copies on a caller that
-    * forgot to gate on FIFO_READ_AVAIL.  Existing callers all
-    * gate first; this is defensive. */
-   avail = FIFO_READ_AVAIL(buffer);
-   if (len > avail)
-      len = avail;
-
-   if (!len)
-      return;
-
-   first_read = len;
 
    if (buffer->first + len > buffer->size)
    {

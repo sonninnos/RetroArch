@@ -126,12 +126,6 @@ static INLINE void fifo_clear(fifo_buffer_t *buffer)
 /**
  * Writes \c size bytes to the given queue.
  *
- * \c size is silently capped at \c FIFO_WRITE_AVAIL(buffer) --
- * the call writes at most that many bytes and discards any
- * excess.  Callers that need to be sure all bytes are queued
- * must gate on \c FIFO_WRITE_AVAIL beforehand.  Behaviour is
- * undefined if \c buffer is \c NULL.
- *
  * @param buffer The FIFO queue to write to.
  * @param in_buf The buffer to read bytes from.
  * @param size The length of \c in_buf, in bytes.
@@ -140,12 +134,6 @@ void fifo_write(fifo_buffer_t *buffer, const void *in_buf, size_t len);
 
 /**
  * Reads \c size bytes from the given queue.
- *
- * \c size is silently capped at \c FIFO_READ_AVAIL(buffer) --
- * the call returns at most that many bytes and leaves the
- * trailing portion of \c in_buf untouched.  Callers that need
- * exactly \c size bytes must gate on \c FIFO_READ_AVAIL
- * beforehand.  Behaviour is undefined if \c buffer is \c NULL.
  *
  * @param buffer The FIFO queue to read from.
  * @param in_buf The buffer to store the read bytes in.
