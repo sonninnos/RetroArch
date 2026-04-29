@@ -815,6 +815,7 @@ INPUT (HID)
 FIFO BUFFER
 ============================================================ */
 #include "../libretro-common/queues/fifo_queue.c"
+#include "../libretro-common/queues/retro_spsc.c"
 
 /*============================================================
 AUDIO RESAMPLER

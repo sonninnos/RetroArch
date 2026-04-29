@@ -80,6 +80,7 @@ jobs:
             task_queue_title_error_test
             tpool_wait_test
             retro_atomic_test
+            retro_spsc_test
           )
 
           # Per-binary run command (overrides ./<binary> if present).
@@ -288,6 +289,31 @@ jobs:
           CC=clang make all SANITIZER=thread
 
           TSAN_OPTIONS=halt_on_error=1 ./retro_atomic_test
+
+      - name: Run retro_spsc_test under Clang + ThreadSanitizer
+        shell: bash
+        working-directory: libretro-common/samples/queues/retro_spsc_test
+        run: |
+          # retro_spsc.c is a lock-free SPSC byte queue built on
+          # retro_atomic.h.  Its correctness contract is acquire-load
+          # / release-store on the head and tail cursors, with the
+          # buffer reads/writes between them ordered by those barriers.
+          # Missing or weakened barriers produce torn data on the
+          # consumer side, observable as content mismatches in the
+          # stress harness AND as TSan-reported races.  The default
+          # ASan/UBSan pass above catches the content mismatches but
+          # not the races; this lane catches both.
+          #
+          # halt_on_error=1 makes TSan exit non-zero on the first race
+          # rather than continuing -- which is what we want for CI:
+          # any race here means the SPSC contract is broken.
+          set -u
+          set -o pipefail
+
+          make clean
+          CC=clang make all SANITIZER=thread
+
+          TSAN_OPTIONS=halt_on_error=1 ./retro_spsc_test
 
   # Cross-architecture validation lane for retro_atomic_test.
   #
