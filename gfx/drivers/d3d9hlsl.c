@@ -1606,7 +1606,8 @@ static void d3d9_font_render_msg(
    if (!d3d)
       return;
 
-   video_driver_get_size(&width, &height);
+   width  = d3d->vp.full_width;
+   height = d3d->vp.full_height;
    if (!width || !height)
       return;
 
@@ -6901,7 +6902,10 @@ static void d3d9_hlsl_set_viewport(void *data,
    int y               = 0;
    struct video_viewport vp;
 
-   video_driver_get_size(&width, &height);
+   /* Width/height parameters are intentionally overwritten here:
+    * the caller's values are not used (pre-existing behaviour). */
+   width  = d3d->vp.full_width;
+   height = d3d->vp.full_height;
 
    vp.full_width  = width;
    vp.full_height = height;
@@ -6963,7 +6967,6 @@ static void d3d9_hlsl_set_osd_msg(void *data,
 static bool d3d9_hlsl_initialize(
       d3d9_video_t *d3d, const video_info_t *info)
 {
-   unsigned width, height;
    bool ret             = true;
 
    if (!d3d->d3d9)
@@ -6998,9 +7001,10 @@ static bool d3d9_hlsl_initialize(
       return false;
    }
 
-   video_driver_get_size(&width, &height);
+   /* d3d->vp.full_* was written by the caller (d3d9_hlsl_init_internal
+    * has already called set_size at this point). */
    d3d9_hlsl_set_viewport(d3d,
-      width, height, false, true);
+      d3d->vp.full_width, d3d->vp.full_height, false, true);
 
    font_driver_init_osd(d3d, info,
          false,
@@ -7200,6 +7204,8 @@ static bool d3d9_hlsl_init_internal(d3d9_video_t *d3d,
       unsigned new_width  = info->fullscreen ? full_x : info->width;
       unsigned new_height = info->fullscreen ? full_y : info->height;
       video_driver_set_size(new_width, new_height);
+      d3d->vp.full_width  = new_width;
+      d3d->vp.full_height = new_height;
 
 #ifdef HAVE_WINDOW
       /* Use new_width / new_height directly rather than reading
@@ -7285,18 +7291,15 @@ error:
 
 static void d3d9_hlsl_viewport_info(void *data, struct video_viewport *vp)
 {
-   unsigned width, height;
    d3d9_video_t *d3d   = (d3d9_video_t*)data;
-
-   video_driver_get_size(&width, &height);
 
    vp->x               = d3d->out_vp.X;
    vp->y               = d3d->out_vp.Y;
    vp->width           = d3d->out_vp.Width;
    vp->height          = d3d->out_vp.Height;
 
-   vp->full_width      = width;
-   vp->full_height     = height;
+   vp->full_width      = d3d->vp.full_width;
+   vp->full_height     = d3d->vp.full_height;
 }
 
 #ifdef HAVE_OVERLAY
@@ -8173,6 +8176,8 @@ static void d3d9_hlsl_set_resize(d3d9_video_t *d3d,
    d3d->video_info.width  = new_width;
    d3d->video_info.height = new_height;
    video_driver_set_size(new_width, new_height);
+   d3d->vp.full_width     = new_width;
+   d3d->vp.full_height    = new_height;
 }
 
 static bool d3d9_hlsl_alive(void *data)
@@ -8184,8 +8189,11 @@ static bool d3d9_hlsl_alive(void *data)
    bool        resize    = false;
    d3d9_video_t *d3d     = (d3d9_video_t*)data;
 
-   /* Needed because some context drivers don't track their sizes */
-   video_driver_get_size(&temp_width, &temp_height);
+   /* Read from local bookkeeping rather than video_st (which would
+    * acquire context_lock + display_lock).  d3d->vp.full_* is
+    * written at every set_size call site in this driver. */
+   temp_width  = d3d->vp.full_width;
+   temp_height = d3d->vp.full_height;
 
    win32_check_window(NULL, &quit, &resize, &temp_width, &temp_height);
 
@@ -8203,7 +8211,11 @@ static bool d3d9_hlsl_alive(void *data)
 
    if (  temp_width  != 0 &&
          temp_height != 0)
+   {
       video_driver_set_size(temp_width, temp_height);
+      d3d->vp.full_width  = temp_width;
+      d3d->vp.full_height = temp_height;
+   }
 
    return ret;
 }
@@ -8264,15 +8276,14 @@ static INLINE bool d3d9_hlsl_device_get_render_target_data(
 
 static bool d3d9_hlsl_read_viewport(void *data, uint8_t *buffer, bool is_idle)
 {
-   unsigned width, height;
    D3DLOCKED_RECT rect;
    LPDIRECT3DSURFACE9 target = NULL;
    LPDIRECT3DSURFACE9 dest   = NULL;
    bool ret                  = true;
    d3d9_video_t *d3d         = (d3d9_video_t*)data;
    LPDIRECT3DDEVICE9 d3dr    = d3d->dev;
-
-   video_driver_get_size(&width, &height);
+   unsigned width            = d3d->vp.full_width;
+   unsigned height           = d3d->vp.full_height;
 
    if (
             !(d3dr &&
