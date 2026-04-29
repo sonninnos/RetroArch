@@ -343,17 +343,13 @@ static void network_gfx_set_nonblock_state(void *a, bool b, bool c, unsigned d) 
 
 static bool network_gfx_alive(void *data)
 {
-   unsigned temp_width      = 0;
-   unsigned temp_height     = 0;
-   bool quit                = false;
-   bool resize              = false;
-   network_video_t *network = (network_video_t*)data;
-
-   video_driver_get_size(&temp_width, &temp_height);
-
-   if (temp_width != 0 && temp_height != 0)
-      video_driver_set_size(temp_width, temp_height);
-
+   /* The video_driver_get_size + conditional set_size dance that
+    * used to live here was a copy-paste from d3d8_alive, where the
+    * intermediate win32_check_window call mutates the fetched
+    * size on window resize.  The network driver has no equivalent
+    * windowing step, so the get/set was reading and writing back
+    * the same values -- a pure no-op.  Drop it. */
+   (void)data;
    return true;
 }
 

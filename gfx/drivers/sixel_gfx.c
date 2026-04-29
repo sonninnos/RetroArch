@@ -502,18 +502,13 @@ static bool sixel_gfx_frame(void *data, const void *frame,
 
 static bool sixel_gfx_alive(void *data)
 {
-   unsigned temp_width  = 0;
-   unsigned temp_height = 0;
-   bool quit            = false;
-   bool resize          = false;
-   sixel_t *sixel       = (sixel_t*)data;
-
-   /* Needed because some context drivers don't track their sizes */
-   video_driver_get_size(&temp_width, &temp_height);
-
-   if (temp_width != 0 && temp_height != 0)
-      video_driver_set_size(temp_width, temp_height);
-
+   /* The video_driver_get_size + conditional set_size dance that
+    * used to live here was a copy-paste from d3d8_alive, where the
+    * intermediate win32_check_window call mutates the fetched
+    * size on window resize.  sixel has no equivalent windowing
+    * step, so the get/set was reading and writing back the same
+    * values -- a pure no-op.  Drop it. */
+   (void)data;
    return true;
 }
 
