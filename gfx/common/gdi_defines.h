@@ -41,6 +41,11 @@ typedef struct gdi
    unsigned video_height;
    unsigned screen_width;
    unsigned screen_height;
+   /* Surface (window) size last published via video_driver_set_size,
+    * tracked here so gdi_alive can read it without locking.  Distinct
+    * from video_width / video_height which is the core's frame size. */
+   unsigned full_width;
+   unsigned full_height;
 
    unsigned menu_width;
    unsigned menu_height;

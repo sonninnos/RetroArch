@@ -175,8 +175,6 @@ static void *vg_init(const video_info_t *video,
             win_width, win_height, video->fullscreen))
       goto error;
 
-   video_driver_get_size(&temp_width, &temp_height);
-
    temp_width        = 0;
    temp_height       = 0;
    mode_width        = 0;

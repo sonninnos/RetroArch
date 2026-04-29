@@ -1287,6 +1287,8 @@ static void *gl1_init(const video_info_t *video,
       video_driver_set_size(temp_width, temp_height);
    else
       video_driver_get_size(&temp_width, &temp_height);
+   gl1->vp.full_width  = temp_width;
+   gl1->vp.full_height = temp_height;
 
    RARCH_LOG("[GL1] Using resolution %ux%u.\n", temp_width, temp_height);
 
@@ -2008,8 +2010,11 @@ static bool gl1_alive(void *data)
    bool ret             = false;
    gl1_t *gl1           = (gl1_t*)data;
 
-   /* Needed because some context drivers don't track their sizes */
-   video_driver_get_size(&temp_width, &temp_height);
+   /* Read from local bookkeeping rather than video_st (which would
+    * acquire context_lock + display_lock).  gl1->vp.full_* is
+    * written at every set_size call site in this driver. */
+   temp_width  = gl1->vp.full_width;
+   temp_height = gl1->vp.full_height;
 
    gl1->ctx_driver->check_window(gl1->ctx_data,
             &quit, &resize, &temp_width, &temp_height);
@@ -2020,7 +2025,11 @@ static bool gl1_alive(void *data)
    ret = !quit;
 
    if (temp_width != 0 && temp_height != 0)
+   {
       video_driver_set_size(temp_width, temp_height);
+      gl1->vp.full_width  = temp_width;
+      gl1->vp.full_height = temp_height;
+   }
 
    return ret;
 }
@@ -2098,19 +2107,17 @@ static void gl1_set_rotation(void *data,
 
 static void gl1_viewport_info(void *data, struct video_viewport *vp)
 {
-   unsigned width, height;
    unsigned top_y, top_dist;
    gl1_t *gl1      = (gl1_t*)data;
 
-   video_driver_get_size(&width, &height);
-
+   /* gl1->vp carries full_width/full_height (written at every
+    * set_size call site), so the struct copy populates them
+    * directly without a video_driver_get_size round-trip. */
    *vp             = gl1->vp;
-   vp->full_width  = width;
-   vp->full_height = height;
 
    /* Adjust as GL viewport is bottom-up. */
    top_y           = vp->y + vp->height;
-   top_dist        = height - top_y;
+   top_dist        = vp->full_height - top_y;
    vp->y           = top_dist;
 }
 
@@ -2135,16 +2142,13 @@ static bool gl1_read_viewport(void *data, uint8_t *buffer, bool is_idle)
       /* Clamp to the region glReadPixels actually wrote.
        * gl1_readback() clamps its read to
        * min(vp.{w,h}, video_{width,height}), where video_{width,height}
-       * come from video_info and ultimately video_driver_get_size().
+       * come from the surface size kept in gl1->vp.full_*.
        * gl1->video_{width,height} holds the core's frame size, not the
-       * window size, so we re-query here to match. Not a hot path. */
-      unsigned vd_w = 0;
-      unsigned vd_h = 0;
-      unsigned rb_w = 0;
-      unsigned rb_h = 0;
-      video_driver_get_size(&vd_w, &vd_h);
-      rb_w = (gl1->vp.width  > vd_w) ? vd_w : gl1->vp.width;
-      rb_h = (gl1->vp.height > vd_h) ? vd_h : gl1->vp.height;
+       * window size, so we read the surface size from gl1->vp.full_*. */
+      unsigned vd_w = gl1->vp.full_width;
+      unsigned vd_h = gl1->vp.full_height;
+      unsigned rb_w = (gl1->vp.width  > vd_w) ? vd_w : gl1->vp.width;
+      unsigned rb_h = (gl1->vp.height > vd_h) ? vd_h : gl1->vp.height;
       video_frame_convert_rgba_to_bgr(
             (const void*)gl1->readback_buffer_screenshot,
             buffer,

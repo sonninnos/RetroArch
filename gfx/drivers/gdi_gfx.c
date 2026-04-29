@@ -573,6 +573,8 @@ static void *gdi_init(const video_info_t *video,
       video_driver_set_size(temp_width, temp_height);
    else
       video_driver_get_size(&temp_width, &temp_height);
+   gdi->full_width  = temp_width;
+   gdi->full_height = temp_height;
 
    RARCH_LOG("[GDI] Using resolution %ux%u.\n", temp_width, temp_height);
 
@@ -793,9 +795,13 @@ static bool gdi_alive(void *data)
    bool quit            = false;
    bool resize          = false;
    bool ret             = false;
+   gdi_t *gdi           = (gdi_t*)data;
 
-   /* Needed because some context drivers don't track their sizes */
-   video_driver_get_size(&temp_width, &temp_height);
+   /* Read from local bookkeeping rather than video_st (which would
+    * acquire context_lock + display_lock).  gdi->full_{width,height}
+    * is written at every set_size call site in this driver. */
+   temp_width  = gdi->full_width;
+   temp_height = gdi->full_height;
 
    win32_check_window(NULL,
             &quit, &resize, &temp_width, &temp_height);
@@ -803,7 +809,11 @@ static bool gdi_alive(void *data)
    ret = !quit;
 
    if (temp_width != 0 && temp_height != 0)
+   {
       video_driver_set_size(temp_width, temp_height);
+      gdi->full_width  = temp_width;
+      gdi->full_height = temp_height;
+   }
 
    return ret;
 }
