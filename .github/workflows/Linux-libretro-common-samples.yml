@@ -78,6 +78,7 @@ jobs:
             rpng_roundtrip_test
             word_wrap_overflow_test
             task_queue_title_error_test
+            tpool_wait_test
           )
 
           # Per-binary run command (overrides ./<binary> if present).
