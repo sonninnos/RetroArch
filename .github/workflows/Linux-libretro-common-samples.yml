@@ -79,6 +79,7 @@ jobs:
             word_wrap_overflow_test
             task_queue_title_error_test
             tpool_wait_test
+            fifo_queue_bounds_test
           )
 
           # Per-binary run command (overrides ./<binary> if present).
