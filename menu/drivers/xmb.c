@@ -519,6 +519,14 @@ typedef struct xmb_handle
     * Prevents use-after-free on textures/fonts during driver
     * reinit under threaded video. */
    uint32_t context_generation;
+
+   /* Surface size last seen by xmb_frame.  Updated every frame
+    * from video_info->{width,height} so non-render code paths
+    * (selection_pointer_changed, list_open_new, list_switch_new,
+    * list_cache, pointer_up, layout) can read the size without
+    * locking video_st via video_driver_get_size. */
+   unsigned last_width;
+   unsigned last_height;
 } xmb_handle_t;
 
 /* Constant color templates — safe to share across threads.
@@ -1896,7 +1904,7 @@ static void xmb_selection_pointer_changed(
    threshold                  = xmb->icon_size * 10;
    menu_st->entries.begin     = num;
 
-   video_driver_get_size(NULL, &height);
+   height                     = xmb->last_height;
 
    /* On cursor movement within a playlist, invalidate any in-flight
     * icon thumbnail requests (they're for the previous cursor position
@@ -2082,13 +2090,12 @@ static void xmb_list_open_new(xmb_handle_t *xmb,
       bool savestate_thumbnail,
       file_list_t *list, int dir, size_t current)
 {
-   unsigned i, height;
+   unsigned i;
+   unsigned height            = xmb->last_height;
    size_t skip                = 0;
    int threshold              = xmb->icon_size * 10;
    size_t end                 = list ? list->size : 0;
    struct menu_state *menu_st = menu_state_get_ptr();
-
-   video_driver_get_size(NULL, &height);
 
    for (i = 0; i < end; i++)
    {
@@ -2270,7 +2277,8 @@ static void xmb_animation_list_alpha(xmb_handle_t *xmb, bool fade_in)
 static void xmb_list_switch_new(xmb_handle_t *xmb,
       file_list_t *list, int dir, size_t current)
 {
-   unsigned i, height;
+   unsigned i;
+   unsigned height     = xmb->last_height;
    unsigned last       = 0;
    unsigned first      = 0;
    size_t end          = 0;
@@ -2281,7 +2289,6 @@ static void xmb_list_switch_new(xmb_handle_t *xmb,
    if (end > 0)
       last             = (unsigned)(end - 1);
 
-   video_driver_get_size(NULL, &height);
    xmb_calculate_visible_range(xmb, height, end, (unsigned)current, &first, &last);
 
    for (i = 0; i < end; i++)
@@ -6470,7 +6477,9 @@ static void xmb_init_scale_mod(float *scale_mod, float scale_value)
 
 static void xmb_layout(xmb_handle_t *xmb)
 {
-   unsigned width, height, i;
+   unsigned i;
+   unsigned width               = xmb->last_width;
+   unsigned height              = xmb->last_height;
    struct menu_state   *menu_st = menu_state_get_ptr();
    menu_list_t *menu_list       = menu_st->entries.list;
    file_list_t *selection_buf   = MENU_LIST_GET_SELECTION(menu_list, 0);
@@ -6478,7 +6487,6 @@ static void xmb_layout(xmb_handle_t *xmb)
    unsigned current             = (unsigned)selection;
    unsigned end                 = (unsigned)MENU_LIST_GET_SELECTION(menu_list, 0)->size;
 
-   video_driver_get_size(&width, &height);
    xmb_init_scale_mod(xmb->scale_mod, config_get_ptr()->floats.menu_scale_factor * 100.0f);
 
    if (xmb->use_ps3_layout)
@@ -8233,6 +8241,11 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
    if (!xmb)
       return;
 
+   /* Cache the per-frame size on the handle so non-render paths
+    * can read it without locking video_st. */
+   xmb->last_width  = video_width;
+   xmb->last_height = video_height;
+
    /* Snapshot context generation — if xmb_context_destroy()
     * runs on the main thread while we are mid-render on the
     * video thread, the generation will change and we must
@@ -9484,6 +9497,11 @@ static void *xmb_init(void **userdata, bool video_is_threaded)
       return NULL;
    }
 
+   /* Initialise last_{width,height} from the snapshot taken
+    * above; xmb_frame will refresh these every render. */
+   xmb->last_width  = width;
+   xmb->last_height = height;
+
    xmb_init_scale_mod(xmb->scale_mod, settings->floats.menu_scale_factor * 100.0f);
 
    *userdata                          = xmb;
@@ -9760,8 +9778,7 @@ static void xmb_list_cache(void *data, enum menu_list_type type,
    if (xmb->allow_horizontal_animation)
    {
       unsigned first  = 0, last = 0;
-      unsigned height = 0;
-      video_driver_get_size(NULL, &height);
+      unsigned height = xmb->last_height;
 
       /* FIXME: this shouldn't be happening at all */
       if (selection >= selection_buf->size)
@@ -10188,7 +10205,8 @@ static int xmb_pointer_up(void *userdata,
       return 0;
    }
 
-   video_driver_get_size(&width, &height);
+   width        = xmb->last_width;
+   height       = xmb->last_height;
    margin_top   = (int16_t)xmb->margins_screen_top;
    margin_left  = (int16_t)xmb->margins_screen_left;
    margin_right = (int16_t)((float)width - xmb->margins_screen_left);

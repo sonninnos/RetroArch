@@ -4751,7 +4751,7 @@ static void ozone_list_cache(void *data,
       ozone->flags           &= ~OZONE_FLAG_IS_PLAYLIST_OLD;
 
    /* Deep copy visible elements */
-   video_driver_get_size(NULL, &video_info_height);
+   video_info_height          = ozone->last_height;
    y                          = ozone->dimensions.header_height + ozone->dimensions.entry_padding_vertical;
    entries_end                = MENU_LIST_GET_SELECTION(menu_list, 0)->size;
    selection_buf              = MENU_LIST_GET_SELECTION(menu_list, 0);
@@ -4860,13 +4860,11 @@ static void ozone_sidebar_goto(ozone_handle_t *ozone, size_t new_selection)
 #endif
    };
 
-   unsigned video_info_height;
+   unsigned video_info_height = ozone->last_height;
    struct gfx_animation_ctx_entry entry;
    uintptr_t tag = (uintptr_t)ozone;
    struct menu_state *menu_st = menu_state_get_ptr();
    menu_input_t *menu_input   = &menu_st->input_state;
-
-   video_driver_get_size(NULL, &video_info_height);
 
    if (ozone->categories_selection_ptr != new_selection)
    {
@@ -5605,7 +5603,7 @@ static void ozone_content_metadata_line(
 static void ozone_update_scroll(ozone_handle_t *ozone,
       bool allow_animation, ozone_node_t *node)
 {
-   unsigned video_info_height;
+   unsigned video_info_height = ozone->last_height;
    gfx_animation_ctx_entry_t entry;
    float new_scroll = 0, entries_middle;
    float bottom_boundary, current_selection_middle_onscreen;
@@ -5614,8 +5612,6 @@ static void ozone_update_scroll(ozone_handle_t *ozone,
    menu_list_t *menu_list     = menu_st->entries.list;
    file_list_t *selection_buf = MENU_LIST_GET_SELECTION(menu_list, 0);
    uintptr_t tag              = (uintptr_t)selection_buf;
-
-   video_driver_get_size(NULL, &video_info_height);
 
    if (!node)
       return;
@@ -5702,8 +5698,8 @@ static void ozone_compute_entries_position(ozone_handle_t *ozone,
 {
    size_t i;
    /* Compute entries height and adjust scrolling if needed */
-   unsigned video_info_height;
-   unsigned video_info_width;
+   unsigned video_info_height    = ozone->last_height;
+   unsigned video_info_width     = ozone->last_width;
    struct menu_state *menu_st    = menu_state_get_ptr();
    menu_list_t *menu_list        = menu_st->entries.list;
    file_list_t *selection_buf    = NULL;
@@ -5728,8 +5724,6 @@ static void ozone_compute_entries_position(ozone_handle_t *ozone,
 
    if (!selection_buf->size)
       return;
-
-   video_driver_get_size(&video_info_width, &video_info_height);
 
    if (menu_show_sublabels)
       sublabel_max_width         = ozone_get_sublabel_max_width(ozone, video_info_width, entry_padding);
@@ -5842,7 +5836,8 @@ static void ozone_draw_entries(
    size_t i;
    uint32_t alpha_uint32;
    float bottom_boundary;
-   unsigned video_info_height, video_info_width;
+   unsigned video_info_height        = ozone->last_height;
+   unsigned video_info_width         = ozone->last_width;
    float last_border_alpha           = -1.0f;
    bool menu_show_sublabels          = settings->bools.menu_show_sublabels;
    bool use_smooth_ticker            = settings->bools.menu_ticker_smooth;
@@ -5873,8 +5868,6 @@ static void ozone_draw_entries(
    unsigned button_height            = ozone->dimensions.entry_height; /* height of the button (entry minus sublabel) */
    float invert                      = (ozone->flags & OZONE_FLAG_FADE_DIRECTION) ? -1 : 1;
    float alpha_anim                  = old_list ? alpha : 1.0f - alpha;
-
-   video_driver_get_size(&video_info_width, &video_info_height);
 
    bottom_boundary                   = video_info_height
          - ozone->dimensions.header_height
@@ -13304,8 +13297,9 @@ static int ozone_pointer_up(void *userdata,
       menu_entry_t *entry,
       unsigned action)
 {
-   unsigned int width, height;
    ozone_handle_t *ozone             = (ozone_handle_t*)userdata;
+   unsigned int width                = ozone->last_width;
+   unsigned int height               = ozone->last_height;
    struct menu_state *menu_st        = menu_state_get_ptr();
    menu_input_t *menu_input          = &menu_st->input_state;
    menu_list_t *menu_list            = menu_st->entries.list;
@@ -13334,8 +13328,6 @@ static int ozone_pointer_up(void *userdata,
       ozone->flags2 &= ~OZONE_FLAG2_WANT_FULLSCREEN_THUMBNAILS;
       return 0;
    }
-
-   video_driver_get_size(&width, &height);
 
    switch (gesture)
    {

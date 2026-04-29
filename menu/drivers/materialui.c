@@ -3353,22 +3353,23 @@ static float materialui_get_scroll(materialui_handle_t *mui,
       gfx_display_t *p_disp)
 {
    size_t i;
+   unsigned height;
    materialui_node_t *node    = NULL;
    struct menu_state *menu_st = menu_state_get_ptr();
    menu_list_t *menu_list     = menu_st->entries.list;
    file_list_t *list          = MENU_LIST_GET_SELECTION(menu_list, 0);
    size_t selection           = menu_st->selection_ptr;
    unsigned header_height     = p_disp->header_height;
-   unsigned width             = 0;
-   unsigned height            = 0;
    float view_centre          = 0.0f;
    float selection_centre     = 0.0f;
 
    if (!mui || !list || !list->size)
       return 0;
 
-   /* Get current window size */
-   video_driver_get_size(&width, &height);
+   /* Read cached size from mui rather than locking video_st via
+    * video_driver_get_size: mui->last_{width,height} is updated
+    * every frame in materialui_render. */
+   height = mui->last_height;
 
    /* Get the vertical midpoint of the actual
     * list view - i.e. account for header +
@@ -10789,14 +10790,12 @@ static int materialui_pointer_down(void *userdata,
    if (       (mui->flags & MUI_FLAG_SCROLLBAR_ACTIVE)
          && (!(mui->flags & MUI_FLAG_SHOW_FULLSCREEN_THUMBNAILS)))
    {
-      unsigned width;
-      unsigned height;
       int drag_margin_horz;
       int drag_margin_vert;
       gfx_display_t *p_disp  = disp_get_ptr();
       unsigned header_height = p_disp->header_height;
-
-      video_driver_get_size(&width, &height);
+      unsigned width         = mui->last_width;
+      unsigned height        = mui->last_height;
 
       /* Check whether pointer down event is within
        * vertical list region */
@@ -11030,6 +11029,10 @@ static int materialui_pointer_up(void *userdata,
    if (!mui)
       return -1;
 
+   /* Read cached size from mui rather than locking video_st via
+    * video_driver_get_size: mui->last_{width,height} is updated
+    * every frame in materialui_render. */
+
    /* All input is ignored if user was previously
     * dragging the scrollbar */
    if (mui->flags & MUI_FLAG_SCROLLBAR_DRAGGED)
@@ -11060,7 +11063,8 @@ static int materialui_pointer_up(void *userdata,
       return 0;
    }
 
-   video_driver_get_size(&width, &height);
+   width  = mui->last_width;
+   height = mui->last_height;
 
    switch (gesture)
    {
