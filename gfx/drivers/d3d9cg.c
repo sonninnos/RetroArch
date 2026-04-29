@@ -476,23 +476,6 @@ static const float d3d9_cg_tex_coords[8] = {
    1, 0
 };
 
-static INT32 gfx_display_prim_to_d3d9_cg_enum(
-      enum gfx_display_prim_type prim_type)
-{
-   switch (prim_type)
-   {
-      case GFX_DISPLAY_PRIM_TRIANGLES:
-      case GFX_DISPLAY_PRIM_TRIANGLESTRIP:
-         return D3DPT_TRIANGLESTRIP;
-      case GFX_DISPLAY_PRIM_NONE:
-      default:
-         break;
-   }
-
-   /* TODO/FIXME - hack */
-   return 0;
-}
-
 static void gfx_display_d3d9_cg_blend_begin(void *data)
 {
    d3d9_video_t *d3d = (d3d9_video_t*)data;
@@ -672,7 +655,6 @@ static void gfx_display_d3d9_cg_draw(gfx_display_ctx_draw_t *draw,
 {
    unsigned i;
    LPDIRECT3DDEVICE9 dev;
-   D3DPRIMITIVETYPE type;
    bool has_vertex_data;
    unsigned start                = 0;
    unsigned count                = 0;
@@ -1038,13 +1020,22 @@ static void gfx_display_d3d9_cg_draw(gfx_display_ctx_draw_t *draw,
 
    gfx_display_d3d9_cg_bind_texture(draw, d3d);
 
-   type  = (D3DPRIMITIVETYPE)gfx_display_prim_to_d3d9_cg_enum(draw->prim_type);
    start = d3d->menu_display.offset;
-   count = draw->coords->vertices -
-         ((draw->prim_type == GFX_DISPLAY_PRIM_TRIANGLESTRIP)
-          ? 2 : 0);
 
-   IDirect3DDevice9_DrawPrimitive(dev, type, start, count);
+   /* Every caller in the codebase sets draw->prim_type to
+    * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call switch on the
+    * primitive type that used to live here was dead.  See the
+    * matching comment in d3d8.c's gfx_display_d3d8_draw for why we
+    * also harden against vertices < 3 (the tristrip count formula
+    * vertices - 2 underflows the unsigned subtraction otherwise). */
+   if (draw->coords->vertices < 3)
+   {
+      d3d->menu_display.offset += draw->coords->vertices;
+      return;
+   }
+   count = draw->coords->vertices - 2;
+
+   IDirect3DDevice9_DrawPrimitive(dev, D3DPT_TRIANGLESTRIP, start, count);
 
    d3d->menu_display.offset += draw->coords->vertices;
 }

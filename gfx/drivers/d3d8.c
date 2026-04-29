@@ -657,23 +657,6 @@ static void *gfx_display_d3d8_get_default_mvp(void *data)
    return &id;
 }
 
-static INT32 gfx_display_prim_to_d3d8_enum(
-      enum gfx_display_prim_type prim_type)
-{
-   switch (prim_type)
-   {
-      case GFX_DISPLAY_PRIM_TRIANGLES:
-      case GFX_DISPLAY_PRIM_TRIANGLESTRIP:
-         return D3DPT_TRIANGLESTRIP;
-      case GFX_DISPLAY_PRIM_NONE:
-      default:
-         break;
-   }
-
-   /* TODO/FIXME - hack */
-   return 0;
-}
-
 static void gfx_display_d3d8_blend_begin(void *data)
 {
    d3d8_video_t *d3d             = (d3d8_video_t*)data;
@@ -710,7 +693,6 @@ static void gfx_display_d3d8_draw(gfx_display_ctx_draw_t *draw,
    math_matrix_4x4 mop, m1, m2;
    LPDIRECT3DVERTEXBUFFER8 vbo;
    LPDIRECT3DDEVICE8 dev;
-   D3DPRIMITIVETYPE type;
    unsigned start                = 0;
    unsigned count                = 0;
    d3d8_video_t *d3d             = (d3d8_video_t*)data;
@@ -1005,32 +987,30 @@ static void gfx_display_d3d8_draw(gfx_display_ctx_draw_t *draw,
    IDirect3DDevice8_SetTextureStageState(dev, 0,
          (D3DTEXTURESTAGESTATETYPE)D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
 
-   type  = gfx_display_prim_to_d3d8_enum(draw->prim_type);
    start = d3d->menu_display.offset;
 
-   /* For tristrips, the primitive count is vertices - 2. Guard
-    * against vertices < 3 which would underflow the unsigned
+   /* Every caller in the codebase sets draw->prim_type to
+    * GFX_DISPLAY_PRIM_TRIANGLESTRIP, and the draw->coords vertices
+    * are laid out as a strip.  Hard-code D3DPT_TRIANGLESTRIP and the
+    * (vertices - 2) primitive-count formula here.  If a future
+    * caller passes TRIANGLES or another primitive type, this site
+    * will need to grow back into a switch -- but with no current
+    * non-tristrip caller, the dead branch was just buggy: it mapped
+    * TRIANGLES to D3DPT_TRIANGLESTRIP (the wrong type) and used
+    * count = vertices (the wrong count formula for D3D, which
+    * expects PrimitiveCount, not vertex count).
+    *
+    * Guard against vertices < 3 which would underflow the unsigned
     * subtraction and pass a huge primitive count to the GPU. */
-   if (draw->prim_type == GFX_DISPLAY_PRIM_TRIANGLESTRIP)
-   {
-      if (draw->coords->vertices < 3)
-      {
-         d3d->menu_display.offset += draw->coords->vertices;
-         return;
-      }
-      count = draw->coords->vertices - 2;
-   }
-   else
-      count = draw->coords->vertices;
-
-   if (count == 0)
+   if (draw->coords->vertices < 3)
    {
       d3d->menu_display.offset += draw->coords->vertices;
       return;
    }
+   count = draw->coords->vertices - 2;
 
    IDirect3DDevice8_BeginScene(dev);
-   IDirect3DDevice8_DrawPrimitive(dev, type, start, count);
+   IDirect3DDevice8_DrawPrimitive(dev, D3DPT_TRIANGLESTRIP, start, count);
    IDirect3DDevice8_EndScene(dev);
 
    d3d->menu_display.offset += draw->coords->vertices;
