@@ -18,6 +18,14 @@
 
 #include "gfx_display.h"
 
+#ifdef HAVE_SDL2
+/* SDL_version.h is needed for the SDL_VERSION_ATLEAST gate on the
+ * gfx_display_ctx_sdl2 table entry. The driver itself requires
+ * SDL_RenderGeometry (>= 2.0.18); on older SDL the symbol is not
+ * defined in sdl2_gfx.c, so the table entry must be elided too. */
+#include <SDL_version.h>
+#endif
+
 #include "../configuration.h"
 #include "../tasks/tasks_internal.h"
 #include "../verbosity.h"
@@ -102,6 +110,9 @@ static gfx_display_ctx_driver_t *gfx_display_ctx_drivers[] = {
 #ifdef HAVE_GDI
    &gfx_display_ctx_gdi,
 #endif
+#endif
+#if defined(HAVE_SDL2) && SDL_VERSION_ATLEAST(2, 0, 18)
+   &gfx_display_ctx_sdl2,
 #endif
    NULL,
 };

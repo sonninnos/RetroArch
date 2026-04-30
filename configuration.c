@@ -3599,6 +3599,15 @@ static bool check_menu_driver_compatibility(settings_t *settings)
          return (memcmp(video_driver, "metal",  5) == 0 && video_driver[5] == '\0');
       case 'r':
          return (memcmp(video_driver, "rsx",    3) == 0 && video_driver[3] == '\0');
+      case 's':
+         /* sdl2 supports the full menu set (XMB/Ozone/MaterialUI/RGUI)
+          * via gfx_display_ctx_sdl2 + sdl2_raster_font, gated on
+          * SDL_RenderGeometry (>= 2.0.18). On older SDL builds the
+          * driver self-disables the gfx_display backend, and only
+          * RGUI's bitmap path is functional - which already returned
+          * true via the rgui early-out above, so allowing sdl2 here
+          * is safe regardless of the runtime SDL version. */
+         return (memcmp(video_driver, "sdl2",   4) == 0 && video_driver[4] == '\0');
       case 'c':
          return (memcmp(video_driver, "ctr",    3) == 0 && video_driver[3] == '\0');
       default:
