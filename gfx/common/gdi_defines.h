@@ -67,6 +67,46 @@ typedef struct gdi
    int  scissor_saved;
    bool scissor_active;
 
+   /* Cached scratch DIB sections for hot-path AlphaBlend sources.
+    *
+    * gfx_display_ctx_gdi_draw and the RGUI alpha helper used to
+    * CreateDIBSection / DeleteObject on every call: that's a kernel
+    * round-trip per draw and Ozone issues hundreds of draws per
+    * frame.  These slots cache the DIB across frames; a draw asks
+    * for "at least W x H pixels" via gdi_ensure_scratch_*, which
+    * grows the DIB if the request exceeds the current cap and
+    * otherwise just hands back the existing pixel pointer.
+    *
+    *   - scratch_1x1: fixed-size 1x1 BGRA, allocated once at gdi_init
+    *     and held for the lifetime of gdi_t.  Used by the translucent
+    *     solid-quad path (single premultiplied pixel, AlphaBlend
+    *     scaled across the destination).  Never freed except in
+    *     gdi_free.
+    *   - scratch_quad: variable.  Used by the per-vertex gradient
+    *     path (sized to dst_w x dst_h) and the texture-modulated
+    *     tint path (sized to the source sub-rect).  Grow-only;
+    *     doesn't shrink when smaller draws come along, since
+    *     reallocation cost would defeat the purpose.
+    *   - scratch_rgui: variable.  Used by the RGUI alpha-composite
+    *     path (sized to the menu_frame dimensions).  Separate from
+    *     scratch_quad so a frame that uses both doesn't thrash one
+    *     slot back and forth.
+    *
+    * Each slot tracks the HBITMAP, the DIB pixel pointer (we write
+    * into it directly), and the current capacity in width/height.
+    * Width and height are tracked separately rather than as a
+    * pixel count because BITMAPINFOHEADER cares about both. */
+   HBITMAP   scratch_1x1_bmp;
+   uint32_t *scratch_1x1_pixels;
+   HBITMAP   scratch_quad_bmp;
+   uint32_t *scratch_quad_pixels;
+   unsigned  scratch_quad_w;
+   unsigned  scratch_quad_h;
+   HBITMAP   scratch_rgui_bmp;
+   uint32_t *scratch_rgui_pixels;
+   unsigned  scratch_rgui_w;
+   unsigned  scratch_rgui_h;
+
    unsigned video_width;
    unsigned video_height;
    unsigned screen_width;

@@ -304,6 +304,193 @@ static void gdi_release_menu_surface(gdi_t *gdi)
    gdi->menu_surface_height = 0;
 }
 
+/* Allocate (or reuse) a BGRA32 scratch DIB section of at least
+ * w x h pixels.  Used by the gradient + texture-modulated paths.
+ * Grows the DIB when the request exceeds the current capacity;
+ * smaller requests reuse the existing buffer at its current size
+ * (the caller writes into the top-left w x h sub-rect and the
+ * downstream AlphaBlend uses that sub-rect as the source extent,
+ * so leftover stale pixels in the unused tail don't matter).
+ *
+ * Returns false if allocation failed, in which case the caller
+ * should bail out of the draw entirely.
+ *
+ * The DIB is BI_RGB top-down so the pixel pointer addresses row 0
+ * first, matching the draw paths' iteration order. */
+static bool gdi_ensure_scratch_quad(gdi_t *gdi, unsigned w, unsigned h)
+{
+   BITMAPINFO bmi;
+   void      *pixels = NULL;
+
+   if (!gdi || !gdi->memDC || !w || !h)
+      return false;
+
+   /* Existing allocation big enough? */
+   if (     gdi->scratch_quad_bmp
+         && gdi->scratch_quad_pixels
+         && gdi->scratch_quad_w >= w
+         && gdi->scratch_quad_h >= h)
+      return true;
+
+   /* Grow.  Take the max of the current cap and the new request so
+    * we don't shrink any axis (one big draw shouldn't force the next
+    * smaller draw to reallocate). */
+   if (gdi->scratch_quad_w > w)
+      w = gdi->scratch_quad_w;
+   if (gdi->scratch_quad_h > h)
+      h = gdi->scratch_quad_h;
+
+   if (gdi->scratch_quad_bmp)
+      DeleteObject(gdi->scratch_quad_bmp);
+   gdi->scratch_quad_bmp    = NULL;
+   gdi->scratch_quad_pixels = NULL;
+   gdi->scratch_quad_w      = 0;
+   gdi->scratch_quad_h      = 0;
+
+   memset(&bmi, 0, sizeof(bmi));
+   bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+   bmi.bmiHeader.biWidth       = (LONG)w;
+   bmi.bmiHeader.biHeight      = -(LONG)h;
+   bmi.bmiHeader.biPlanes      = 1;
+   bmi.bmiHeader.biBitCount    = 32;
+   bmi.bmiHeader.biCompression = BI_RGB;
+
+   gdi->scratch_quad_bmp = CreateDIBSection(gdi->memDC, &bmi,
+         DIB_RGB_COLORS, &pixels, NULL, 0);
+   if (!gdi->scratch_quad_bmp || !pixels)
+   {
+      if (gdi->scratch_quad_bmp)
+         DeleteObject(gdi->scratch_quad_bmp);
+      gdi->scratch_quad_bmp    = NULL;
+      gdi->scratch_quad_pixels = NULL;
+      return false;
+   }
+
+   gdi->scratch_quad_pixels = (uint32_t*)pixels;
+   gdi->scratch_quad_w      = w;
+   gdi->scratch_quad_h      = h;
+   return true;
+}
+
+/* Same idea as gdi_ensure_scratch_quad, but for the RGUI
+ * alpha-composite path.  Kept as a separate slot so a frame that
+ * draws gradient quads AND composites RGUI doesn't thrash one
+ * shared DIB back and forth between sizes. */
+static bool gdi_ensure_scratch_rgui(gdi_t *gdi, unsigned w, unsigned h)
+{
+   BITMAPINFO bmi;
+   void      *pixels = NULL;
+
+   if (!gdi || !gdi->memDC || !w || !h)
+      return false;
+
+   if (     gdi->scratch_rgui_bmp
+         && gdi->scratch_rgui_pixels
+         && gdi->scratch_rgui_w >= w
+         && gdi->scratch_rgui_h >= h)
+      return true;
+
+   if (gdi->scratch_rgui_w > w)
+      w = gdi->scratch_rgui_w;
+   if (gdi->scratch_rgui_h > h)
+      h = gdi->scratch_rgui_h;
+
+   if (gdi->scratch_rgui_bmp)
+      DeleteObject(gdi->scratch_rgui_bmp);
+   gdi->scratch_rgui_bmp    = NULL;
+   gdi->scratch_rgui_pixels = NULL;
+   gdi->scratch_rgui_w      = 0;
+   gdi->scratch_rgui_h      = 0;
+
+   memset(&bmi, 0, sizeof(bmi));
+   bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+   bmi.bmiHeader.biWidth       = (LONG)w;
+   bmi.bmiHeader.biHeight      = -(LONG)h;
+   bmi.bmiHeader.biPlanes      = 1;
+   bmi.bmiHeader.biBitCount    = 32;
+   bmi.bmiHeader.biCompression = BI_RGB;
+
+   gdi->scratch_rgui_bmp = CreateDIBSection(gdi->memDC, &bmi,
+         DIB_RGB_COLORS, &pixels, NULL, 0);
+   if (!gdi->scratch_rgui_bmp || !pixels)
+   {
+      if (gdi->scratch_rgui_bmp)
+         DeleteObject(gdi->scratch_rgui_bmp);
+      gdi->scratch_rgui_bmp    = NULL;
+      gdi->scratch_rgui_pixels = NULL;
+      return false;
+   }
+
+   gdi->scratch_rgui_pixels = (uint32_t*)pixels;
+   gdi->scratch_rgui_w      = w;
+   gdi->scratch_rgui_h      = h;
+   return true;
+}
+
+/* Allocate the fixed 1x1 BGRA scratch DIB.  Used by the
+ * translucent-solid-quad path: one premultiplied pixel,
+ * AlphaBlend stretches it across the destination rect.  Lazy: if
+ * the caller hits the path before init has set this up, fall
+ * back to a CreateDIBSection here.  We could move this to
+ * gdi_init unconditionally but lazy initialisation costs nothing
+ * and is robust to any future callers that arise before init
+ * has run. */
+static bool gdi_ensure_scratch_1x1(gdi_t *gdi)
+{
+   BITMAPINFO bmi;
+   void      *pixels = NULL;
+
+   if (!gdi || !gdi->memDC)
+      return false;
+   if (gdi->scratch_1x1_bmp && gdi->scratch_1x1_pixels)
+      return true;
+
+   memset(&bmi, 0, sizeof(bmi));
+   bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+   bmi.bmiHeader.biWidth       = 1;
+   bmi.bmiHeader.biHeight      = -1;
+   bmi.bmiHeader.biPlanes      = 1;
+   bmi.bmiHeader.biBitCount    = 32;
+   bmi.bmiHeader.biCompression = BI_RGB;
+
+   gdi->scratch_1x1_bmp = CreateDIBSection(gdi->memDC, &bmi,
+         DIB_RGB_COLORS, &pixels, NULL, 0);
+   if (!gdi->scratch_1x1_bmp || !pixels)
+   {
+      if (gdi->scratch_1x1_bmp)
+         DeleteObject(gdi->scratch_1x1_bmp);
+      gdi->scratch_1x1_bmp    = NULL;
+      gdi->scratch_1x1_pixels = NULL;
+      return false;
+   }
+
+   gdi->scratch_1x1_pixels = (uint32_t*)pixels;
+   return true;
+}
+
+/* Free all cached scratch DIBs.  Called from gdi_free. */
+static void gdi_release_scratch(gdi_t *gdi)
+{
+   if (!gdi)
+      return;
+   if (gdi->scratch_1x1_bmp)
+      DeleteObject(gdi->scratch_1x1_bmp);
+   if (gdi->scratch_quad_bmp)
+      DeleteObject(gdi->scratch_quad_bmp);
+   if (gdi->scratch_rgui_bmp)
+      DeleteObject(gdi->scratch_rgui_bmp);
+   gdi->scratch_1x1_bmp     = NULL;
+   gdi->scratch_1x1_pixels  = NULL;
+   gdi->scratch_quad_bmp    = NULL;
+   gdi->scratch_quad_pixels = NULL;
+   gdi->scratch_quad_w      = 0;
+   gdi->scratch_quad_h      = 0;
+   gdi->scratch_rgui_bmp    = NULL;
+   gdi->scratch_rgui_pixels = NULL;
+   gdi->scratch_rgui_w      = 0;
+   gdi->scratch_rgui_h      = 0;
+}
+
 /* Clear the menu surface to a solid (premultiplied) BGRA value.
  *
  * Implemented via FillRect (rather than direct pixel write) so the
@@ -444,34 +631,26 @@ static void gdi_blit_rgui_alpha(gdi_t *gdi,
       unsigned dst_x, unsigned dst_y,
       unsigned dst_w, unsigned dst_h)
 {
-   BITMAPINFO       bmi;
-   void            *bgra_pixels = NULL;
-   HBITMAP          scratch_bmp;
    HBITMAP          scratch_old;
    BLENDFUNCTION    blend;
    const uint16_t  *src;
    uint32_t        *dst;
    unsigned         x, y;
+   unsigned         stride;
 
    if (!gdi || !gdi->memDC || !frame_data || !frame_w || !frame_h)
       return;
 
-   memset(&bmi, 0, sizeof(bmi));
-   bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-   bmi.bmiHeader.biWidth       = frame_w;
-   bmi.bmiHeader.biHeight      = -(int)frame_h; /* top-down */
-   bmi.bmiHeader.biPlanes      = 1;
-   bmi.bmiHeader.biBitCount    = 32;
-   bmi.bmiHeader.biCompression = BI_RGB;
-
-   scratch_bmp = CreateDIBSection(gdi->memDC, &bmi, DIB_RGB_COLORS,
-         &bgra_pixels, NULL, 0);
-   if (!scratch_bmp || !bgra_pixels)
-   {
-      if (scratch_bmp)
-         DeleteObject(scratch_bmp);
+   /* Ensure the cached scratch DIB is big enough.  Stride is the
+    * DIB's allocated row width in pixels, which may be larger than
+    * frame_w if a previous frame requested a wider RGUI surface
+    * (we never shrink).  We write into the top-left frame_w x
+    * frame_h sub-rect; the AlphaBlend source extent below is also
+    * frame_w x frame_h, so leftover pixels in the unused tail of
+    * the DIB are ignored. */
+   if (!gdi_ensure_scratch_rgui(gdi, frame_w, frame_h))
       return;
-   }
+   stride = gdi->scratch_rgui_w;
 
    /* RGBA4444 → BGRA32 premultiplied.  Layout from
     * argb32_to_rgba4444:
@@ -482,7 +661,7 @@ static void gdi_blit_rgui_alpha(gdi_t *gdi,
     * c4 / a4 are 0..15 and 17 expands 4-bit to 8-bit.  We compute
     * everything at 8-bit precision after the expand. */
    src = (const uint16_t *)frame_data;
-   dst = (uint32_t *)bgra_pixels;
+   dst = gdi->scratch_rgui_pixels;
    for (y = 0; y < frame_h; y++)
    {
       for (x = 0; x < frame_w; x++)
@@ -495,7 +674,7 @@ static void gdi_blit_rgui_alpha(gdi_t *gdi,
 
          if (a == 0)
          {
-            dst[y * frame_w + x] = 0;
+            dst[y * stride + x] = 0;
             continue;
          }
          if (a < 255)
@@ -504,13 +683,13 @@ static void gdi_blit_rgui_alpha(gdi_t *gdi,
             g = (g * a + 127) / 255;
             b = (b * a + 127) / 255;
          }
-         dst[y * frame_w + x] = (a << 24) | (r << 16) | (g << 8) | b;
+         dst[y * stride + x] = (a << 24) | (r << 16) | (g << 8) | b;
       }
    }
 
    if (!gdi->texDC)
       gdi->texDC = CreateCompatibleDC(gdi->winDC);
-   scratch_old = (HBITMAP)SelectObject(gdi->texDC, scratch_bmp);
+   scratch_old = (HBITMAP)SelectObject(gdi->texDC, gdi->scratch_rgui_bmp);
 
    blend.BlendOp             = AC_SRC_OVER;
    blend.BlendFlags          = 0;
@@ -523,7 +702,6 @@ static void gdi_blit_rgui_alpha(gdi_t *gdi,
          blend);
 
    SelectObject(gdi->texDC, scratch_old);
-   DeleteObject(scratch_bmp);
 }
 #endif /* GDI_HAS_ALPHABLEND */
 
@@ -667,14 +845,12 @@ static void gdi_blit_texture_modulated(
       int src_x, int src_y, unsigned src_w, unsigned src_h,
       uint8_t mod_r, uint8_t mod_g, uint8_t mod_b, uint8_t mod_a)
 {
-   BITMAPINFO bmi;
-   void *pixels = NULL;
-   HBITMAP scratch_bmp;
    HBITMAP scratch_old;
    const uint32_t *src;
    uint32_t *dst;
    size_t   y_idx, x_idx;
    BLENDFUNCTION blend;
+   unsigned stride;
 
    if (src_w == 0 || src_h == 0)
    {
@@ -710,30 +886,18 @@ static void gdi_blit_texture_modulated(
       return;
    }
 
-   /* Slow path: per-call premultiplied copy with RGB tint baked in.
-    * Allocates a scratch DIB sized to the source sub-rect; we only
+   /* Slow path: premultiplied copy with RGB tint baked in.  We only
     * tint the sub-rect we actually intend to sample from, which
     * keeps this path's cost proportional to the slice size rather
-    * than the full texture. */
-   memset(&bmi, 0, sizeof(bmi));
-   bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-   bmi.bmiHeader.biWidth       = (LONG)src_w;
-   bmi.bmiHeader.biHeight      = -(LONG)src_h;
-   bmi.bmiHeader.biPlanes      = 1;
-   bmi.bmiHeader.biBitCount    = 32;
-   bmi.bmiHeader.biCompression = BI_RGB;
-
-   scratch_bmp = CreateDIBSection(gdi->memDC, &bmi, DIB_RGB_COLORS,
-         &pixels, NULL, 0);
-   if (!scratch_bmp || !pixels)
-   {
-      if (scratch_bmp)
-         DeleteObject(scratch_bmp);
+    * than the full texture.  The scratch DIB is cached on gdi_t
+    * (gdi->scratch_quad_*) and grow-only across calls; stride is
+    * the cached DIB's row width which may exceed src_w. */
+   if (!gdi_ensure_scratch_quad(gdi, src_w, src_h))
       return;
-   }
+   stride = gdi->scratch_quad_w;
 
    src   = (const uint32_t*)texture->data;
-   dst   = (uint32_t*)pixels;
+   dst   = gdi->scratch_quad_pixels;
 
    /* Source pixels are already premultiplied with their own alpha
     * (gdi_load_texture did the multiply once at load).  Apply the
@@ -745,7 +909,7 @@ static void gdi_blit_texture_modulated(
       const uint32_t *src_row = src
          + ((size_t)src_y + y_idx) * (size_t)texture->width
          + (size_t)src_x;
-      uint32_t       *dst_row = dst + y_idx * src_w;
+      uint32_t       *dst_row = dst + y_idx * stride;
       for (x_idx = 0; x_idx < src_w; x_idx++)
       {
          uint32_t s  = src_row[x_idx];
@@ -763,7 +927,7 @@ static void gdi_blit_texture_modulated(
 
    if (!gdi->texDC)
       gdi->texDC = CreateCompatibleDC(gdi->winDC);
-   scratch_old = (HBITMAP)SelectObject(gdi->texDC, scratch_bmp);
+   scratch_old = (HBITMAP)SelectObject(gdi->texDC, gdi->scratch_quad_bmp);
 
    blend.BlendOp             = AC_SRC_OVER;
    blend.BlendFlags          = 0;
@@ -776,7 +940,6 @@ static void gdi_blit_texture_modulated(
          blend);
 
    SelectObject(gdi->texDC, scratch_old);
-   DeleteObject(scratch_bmp);
 }
 #endif /* GDI_HAS_ALPHABLEND */
 
@@ -1096,14 +1259,13 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
           * Layout: 4 vertices in the colour array, indexed BL/BR/TL/TR
           * (y is bottom-up in the source convention).  We bilinearly
           * interpolate per channel across the destination rectangle.
-          * The scratch DIB is the destination's exact size — gradient
-          * quads are typically small (header strips, sidebar fades)
-          * so the malloc cost is bounded. */
-         BITMAPINFO bmi;
-         void     *pix          = NULL;
-         HBITMAP   scratch_bmp;
+          * The scratch DIB is cached on gdi_t (gdi->scratch_quad_*)
+          * and grow-only across calls; stride is the cached DIB's
+          * row width which may exceed dst_w when an earlier draw
+          * needed a wider gradient. */
          uint32_t *out;
          unsigned  ix, iy;
+         unsigned  stride;
          /* Pull RGBA components from each corner.  Alpha is
           * interpolated per-pixel just like RGB, because the alpha
           * channel itself can carry the gradient — widget drop
@@ -1120,23 +1282,10 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
          bool all_opaque = (bl_a == 255 && br_a == 255
                          && tl_a == 255 && tr_a == 255);
 
-         memset(&bmi, 0, sizeof(bmi));
-         bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-         bmi.bmiHeader.biWidth       = (LONG)dst_w;
-         bmi.bmiHeader.biHeight      = -(LONG)dst_h;
-         bmi.bmiHeader.biPlanes      = 1;
-         bmi.bmiHeader.biBitCount    = 32;
-         bmi.bmiHeader.biCompression = BI_RGB;
-
-         scratch_bmp = CreateDIBSection(gdi->memDC, &bmi, DIB_RGB_COLORS,
-               &pix, NULL, 0);
-         if (!scratch_bmp || !pix)
-         {
-            if (scratch_bmp)
-               DeleteObject(scratch_bmp);
+         if (!gdi_ensure_scratch_quad(gdi, dst_w, dst_h))
             return;
-         }
-         out = (uint32_t*)pix;
+         out    = gdi->scratch_quad_pixels;
+         stride = gdi->scratch_quad_w;
 
          /* Bilinear interpolation: t_x in [0,1] across width,
           * t_y in [0,1] across height.  Source rows in the colour
@@ -1150,7 +1299,7 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
          {
             unsigned ty;
             unsigned t_top, t_bot;
-            uint32_t *row = out + (size_t)iy * dst_w;
+            uint32_t *row = out + (size_t)iy * stride;
 
             /* Top of dst → ty=0 (full TL/TR contribution).  Bottom
              * of dst → ty=255 (full BL/BR contribution). */
@@ -1210,7 +1359,7 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
          if (!gdi->texDC)
             gdi->texDC = CreateCompatibleDC(gdi->winDC);
          {
-            HBITMAP scratch_old = (HBITMAP)SelectObject(gdi->texDC, scratch_bmp);
+            HBITMAP scratch_old = (HBITMAP)SelectObject(gdi->texDC, gdi->scratch_quad_bmp);
             if (all_opaque)
             {
                BitBlt(gdi->memDC,
@@ -1230,47 +1379,31 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
             }
             SelectObject(gdi->texDC, scratch_old);
          }
-         DeleteObject(scratch_bmp);
          return;
       }
 
-      /* Translucent solid colour.  Build a 1x1 premultiplied source
-       * and AlphaBlend it scaled across the destination rect. */
+      /* Translucent solid colour.  AlphaBlend a 1x1 premultiplied
+       * pixel across the destination rect.  The 1x1 DIB is cached on
+       * gdi_t (gdi->scratch_1x1_bmp); we just rewrite the pixel
+       * each call. */
       {
-         BITMAPINFO bmi;
-         void *pix       = NULL;
-         HBITMAP src_bmp;
          HBITMAP src_old;
          BLENDFUNCTION blend;
          uint32_t pre;
 
-         memset(&bmi, 0, sizeof(bmi));
-         bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-         bmi.bmiHeader.biWidth       = 1;
-         bmi.bmiHeader.biHeight      = -1;
-         bmi.bmiHeader.biPlanes      = 1;
-         bmi.bmiHeader.biBitCount    = 32;
-         bmi.bmiHeader.biCompression = BI_RGB;
-
-         src_bmp = CreateDIBSection(gdi->memDC, &bmi, DIB_RGB_COLORS,
-               &pix, NULL, 0);
-         if (!src_bmp || !pix)
-         {
-            if (src_bmp)
-               DeleteObject(src_bmp);
+         if (!gdi_ensure_scratch_1x1(gdi))
             return;
-         }
 
          /* Premultiply the source colour by its alpha. */
          pre = ((uint32_t)avg_a << 24)
              | (((uint32_t)avg_r * avg_a / 255u) << 16)
              | (((uint32_t)avg_g * avg_a / 255u) <<  8)
              |  ((uint32_t)avg_b * avg_a / 255u);
-         *(uint32_t*)pix = pre;
+         *gdi->scratch_1x1_pixels = pre;
 
          if (!gdi->texDC)
             gdi->texDC = CreateCompatibleDC(gdi->winDC);
-         src_old = (HBITMAP)SelectObject(gdi->texDC, src_bmp);
+         src_old = (HBITMAP)SelectObject(gdi->texDC, gdi->scratch_1x1_bmp);
 
          blend.BlendOp             = AC_SRC_OVER;
          blend.BlendFlags          = 0;
@@ -1282,7 +1415,6 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
                gdi->texDC, 0, 0, 1, 1, blend);
 
          SelectObject(gdi->texDC, src_old);
-         DeleteObject(src_bmp);
       }
 #else
       /* Pre-Win98 fallback: no AlphaBlend, no GradientFill.  Just
@@ -2960,6 +3092,11 @@ static void gdi_free(void *data)
     * the DC it's selected into goes away. */
    gdi_release_menu_surface(gdi);
    gdi_release_brush(gdi);
+
+   /* Cached scratch DIB sections from the gradient / 1x1 / RGUI
+    * paths.  Like the menu surface, these need to go before texDC
+    * is destroyed — they may currently be selected into it. */
+   gdi_release_scratch(gdi);
 
 #ifdef HAVE_OVERLAY
    /* Overlay DIB sections must be released before texDC goes away
