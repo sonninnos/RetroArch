@@ -142,6 +142,28 @@ static INLINE uint8_t gdi_float_to_byte(float f)
    return (uint8_t)v;
 }
 
+/* Fast divide-by-255 for 8-bit-times-8-bit products.
+ *
+ * The hot pixel paths (gradient bilinear, RGUI alpha composite,
+ * texture-modulated tint, font tinted-glyph composite, load-time
+ * texture / overlay premultiply) all need to divide a value of
+ * the form (a * b) where both a and b are 0..255 by 255 to get
+ * back into 0..255 range.  An integer divide is 20-30 cycles on
+ * x86; the shift+add form below is bit-exact equivalent to
+ * (uint32_t)x / 255u for x in [0, 255*255 = 65025], i.e. for
+ * any product of two 8-bit values.
+ *
+ * Brute-force verified against integer division for every input
+ * in that range; produces the same truncating (round-toward-
+ * zero) result the original `/ 255u` produced, so the
+ * substitution is byte-identical at every call site rather than
+ * being a "close enough" rounding approximation.
+ *
+ * x is referenced multiple times, so callers should pass an
+ * already-evaluated lvalue or temporary; passing a side-effecting
+ * expression would evaluate it twice. */
+#define GDI_DIV255(x) ((((x) + 1) + ((x) >> 8)) >> 8)
+
 /* Pull the four corners of the per-vertex colour array off a
  * gfx_display_ctx_draw_t.  Caller passes pointers to four uint32_t
  * BGRA values plus a single averaged tint colour (used when we
@@ -917,7 +939,13 @@ static void gdi_blit_texture_modulated(
          uint8_t  sr = (uint8_t)((s >> 16) & 0xFF);
          uint8_t  sg = (uint8_t)((s >>  8) & 0xFF);
          uint8_t  sb = (uint8_t)( s        & 0xFF);
-         uint32_t out_a = ((uint32_t)sa * mod_a) / 255u;
+         uint32_t out_a = GDI_DIV255((uint32_t)sa * mod_a);
+         /* The /255²/ divides for out_r/g/b are deliberately left
+          * unchanged — collapsing to two GDI_DIV255 calls would
+          * introduce rounding error of up to 1 LSB compared to
+          * the single 16-bit divide, and the cost of one divide
+          * per channel here isn't worth a visible drift in
+          * tinted-icon pixels. */
          uint32_t out_r = ((uint32_t)sr * mod_r * mod_a) / (255u * 255u);
          uint32_t out_g = ((uint32_t)sg * mod_g * mod_a) / (255u * 255u);
          uint32_t out_b = ((uint32_t)sb * mod_b * mod_a) / (255u * 255u);
@@ -1326,18 +1354,18 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
                   unsigned ty   = (dst_h <= 1) ? 0 : (iy * 255u) / (dst_h - 1);
                   unsigned t_top = 255u - ty;
                   unsigned t_bot = ty;
-                  uint32_t r_   = (tl_r * t_top + bl_r * t_bot) / 255u;
-                  uint32_t g_   = (tl_g * t_top + bl_g * t_bot) / 255u;
-                  uint32_t b_   = (tl_b * t_top + bl_b * t_bot) / 255u;
-                  uint32_t a_   = (tl_a * t_top + bl_a * t_bot) / 255u;
+                  uint32_t r_   = GDI_DIV255(tl_r * t_top + bl_r * t_bot);
+                  uint32_t g_   = GDI_DIV255(tl_g * t_top + bl_g * t_bot);
+                  uint32_t b_   = GDI_DIV255(tl_b * t_top + bl_b * t_bot);
+                  uint32_t a_   = GDI_DIV255(tl_a * t_top + bl_a * t_bot);
                   uint32_t pix;
                   if (all_opaque)
                      pix = (0xFFu << 24) | (r_ << 16) | (g_ << 8) | b_;
                   else
                   {
-                     uint32_t pr = (r_ * a_) / 255u;
-                     uint32_t pg = (g_ * a_) / 255u;
-                     uint32_t pb = (b_ * a_) / 255u;
+                     uint32_t pr = GDI_DIV255(r_ * a_);
+                     uint32_t pg = GDI_DIV255(g_ * a_);
+                     uint32_t pb = GDI_DIV255(b_ * a_);
                      pix = (a_ << 24) | (pr << 16) | (pg << 8) | pb;
                   }
                   /* Fill the row.  Inline 32-bit stores are what
@@ -1359,17 +1387,17 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
                   unsigned tx      = (dst_w <= 1) ? 0 : (ix * 255u) / (dst_w - 1);
                   unsigned t_left  = 255u - tx;
                   unsigned t_right = tx;
-                  uint32_t r_      = (tl_r * t_left + tr_r * t_right) / 255u;
-                  uint32_t g_      = (tl_g * t_left + tr_g * t_right) / 255u;
-                  uint32_t b_      = (tl_b * t_left + tr_b * t_right) / 255u;
-                  uint32_t a_      = (tl_a * t_left + tr_a * t_right) / 255u;
+                  uint32_t r_      = GDI_DIV255(tl_r * t_left + tr_r * t_right);
+                  uint32_t g_      = GDI_DIV255(tl_g * t_left + tr_g * t_right);
+                  uint32_t b_      = GDI_DIV255(tl_b * t_left + tr_b * t_right);
+                  uint32_t a_      = GDI_DIV255(tl_a * t_left + tr_a * t_right);
                   if (all_opaque)
                      first_row[ix] = (0xFFu << 24) | (r_ << 16) | (g_ << 8) | b_;
                   else
                   {
-                     uint32_t pr = (r_ * a_) / 255u;
-                     uint32_t pg = (g_ * a_) / 255u;
-                     uint32_t pb = (b_ * a_) / 255u;
+                     uint32_t pr = GDI_DIV255(r_ * a_);
+                     uint32_t pg = GDI_DIV255(g_ * a_);
+                     uint32_t pb = GDI_DIV255(b_ * a_);
                      first_row[ix] = (a_ << 24) | (pr << 16) | (pg << 8) | pb;
                   }
                }
@@ -1408,29 +1436,29 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
 
                      /* Vertical interp: left edge (TL→BL) and right
                       * edge (TR→BR). */
-                     left_r  = (tl_r * t_top + bl_r * t_bot) / 255u;
-                     left_g  = (tl_g * t_top + bl_g * t_bot) / 255u;
-                     left_b  = (tl_b * t_top + bl_b * t_bot) / 255u;
-                     left_a  = (tl_a * t_top + bl_a * t_bot) / 255u;
-                     right_r = (tr_r * t_top + br_r * t_bot) / 255u;
-                     right_g = (tr_g * t_top + br_g * t_bot) / 255u;
-                     right_b = (tr_b * t_top + br_b * t_bot) / 255u;
-                     right_a = (tr_a * t_top + br_a * t_bot) / 255u;
+                     left_r  = GDI_DIV255(tl_r * t_top + bl_r * t_bot);
+                     left_g  = GDI_DIV255(tl_g * t_top + bl_g * t_bot);
+                     left_b  = GDI_DIV255(tl_b * t_top + bl_b * t_bot);
+                     left_a  = GDI_DIV255(tl_a * t_top + bl_a * t_bot);
+                     right_r = GDI_DIV255(tr_r * t_top + br_r * t_bot);
+                     right_g = GDI_DIV255(tr_g * t_top + br_g * t_bot);
+                     right_b = GDI_DIV255(tr_b * t_top + br_b * t_bot);
+                     right_a = GDI_DIV255(tr_a * t_top + br_a * t_bot);
 
                      /* Horizontal interp between the two vertical
                       * edges. */
-                     r_ = (left_r * t_left + right_r * t_right) / 255u;
-                     g_ = (left_g * t_left + right_g * t_right) / 255u;
-                     b_ = (left_b * t_left + right_b * t_right) / 255u;
-                     a_ = (left_a * t_left + right_a * t_right) / 255u;
+                     r_ = GDI_DIV255(left_r * t_left + right_r * t_right);
+                     g_ = GDI_DIV255(left_g * t_left + right_g * t_right);
+                     b_ = GDI_DIV255(left_b * t_left + right_b * t_right);
+                     a_ = GDI_DIV255(left_a * t_left + right_a * t_right);
 
                      if (all_opaque)
                         row[ix] = (0xFFu << 24) | (r_ << 16) | (g_ << 8) | b_;
                      else
                      {
-                        uint32_t pr = (r_ * a_) / 255u;
-                        uint32_t pg = (g_ * a_) / 255u;
-                        uint32_t pb = (b_ * a_) / 255u;
+                        uint32_t pr = GDI_DIV255(r_ * a_);
+                        uint32_t pg = GDI_DIV255(g_ * a_);
+                        uint32_t pb = GDI_DIV255(b_ * a_);
                         row[ix] = (a_ << 24) | (pr << 16) | (pg << 8) | pb;
                      }
                   }
@@ -1482,9 +1510,9 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
 
          /* Premultiply the source colour by its alpha. */
          pre = ((uint32_t)avg_a << 24)
-             | (((uint32_t)avg_r * avg_a / 255u) << 16)
-             | (((uint32_t)avg_g * avg_a / 255u) <<  8)
-             |  ((uint32_t)avg_b * avg_a / 255u);
+             | (GDI_DIV255((uint32_t)avg_r * avg_a) << 16)
+             | (GDI_DIV255((uint32_t)avg_g * avg_a) <<  8)
+             |  GDI_DIV255((uint32_t)avg_b * avg_a);
          *gdi->scratch_1x1_pixels = pre;
 
          if (!gdi->texDC)
@@ -1977,9 +2005,9 @@ static void gdi_font_render_line(
       /* Premultiply the requested colour.  We'll multiply by the
        * atlas alpha per pixel below. */
       pre_a = a;
-      pre_r = ((uint32_t)r * a) / 255u;
-      pre_g = ((uint32_t)g * a) / 255u;
-      pre_b = ((uint32_t)b * a) / 255u;
+      pre_r = GDI_DIV255((uint32_t)r * a);
+      pre_g = GDI_DIV255((uint32_t)g * a);
+      pre_b = GDI_DIV255((uint32_t)b * a);
 
       /* Composite glyphs into the scratch DIB.  Scale-1.0 fast path
        * does direct A8 → premultiplied BGRA copy; scaled glyphs go
@@ -2046,10 +2074,10 @@ static void gdi_font_render_line(
                   /* Premultiplied glyph pixel at the requested tint.
                    * Output alpha = atlas_a * tint_a; output RGB =
                    * tint_RGB premultiplied by output alpha. */
-                  out_a = ((uint32_t)alpha * pre_a) / 255u;
-                  out_r = ((uint32_t)alpha * pre_r) / 255u;
-                  out_g = ((uint32_t)alpha * pre_g) / 255u;
-                  out_b = ((uint32_t)alpha * pre_b) / 255u;
+                  out_a = GDI_DIV255((uint32_t)alpha * pre_a);
+                  out_r = GDI_DIV255((uint32_t)alpha * pre_r);
+                  out_g = GDI_DIV255((uint32_t)alpha * pre_g);
+                  out_b = GDI_DIV255((uint32_t)alpha * pre_b);
                   /* Last-write wins where glyphs overlap: kerned
                    * fonts can produce overlapping bounding boxes,
                    * but the actual coverage rarely overlaps. */
@@ -3329,9 +3357,9 @@ static uintptr_t gdi_load_texture(void *video_data, void *data,
       }
       else
       {
-         pr = (uint8_t)(((unsigned)sr * sa) / 255u);
-         pg = (uint8_t)(((unsigned)sg * sa) / 255u);
-         pb = (uint8_t)(((unsigned)sb * sa) / 255u);
+         pr = (uint8_t)GDI_DIV255((unsigned)sr * sa);
+         pg = (uint8_t)GDI_DIV255((unsigned)sg * sa);
+         pb = (uint8_t)GDI_DIV255((unsigned)sb * sa);
       }
       dst[i] = ((uint32_t)sa << 24)
              | ((uint32_t)pr << 16)
@@ -3598,9 +3626,9 @@ static bool gdi_overlay_load(void *data,
          else if (sa == 0)   { pr = pg = pb = 0; }
          else
          {
-            pr = (uint8_t)(((unsigned)sr * sa) / 255u);
-            pg = (uint8_t)(((unsigned)sg * sa) / 255u);
-            pb = (uint8_t)(((unsigned)sb * sa) / 255u);
+            pr = (uint8_t)GDI_DIV255((unsigned)sr * sa);
+            pg = (uint8_t)GDI_DIV255((unsigned)sg * sa);
+            pb = (uint8_t)GDI_DIV255((unsigned)sb * sa);
          }
          dst[j] = ((uint32_t)sa << 24)
                 | ((uint32_t)pr << 16)
