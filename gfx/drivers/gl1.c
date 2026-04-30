@@ -1643,16 +1643,7 @@ static bool gl1_frame(void *data, const void *frame,
 
    /* gl1 fixed-function has no programmable pipeline, so the
     * animated XMB backgrounds (Ribbon / Snow / Bokeh / etc.) can't
-    * run -- force that off so XMB falls back to the static gradient.
-    *
-    * xmb_shadows_enable, on the other hand, is just "draw the icon
-    * and text once at +offset with a black tint, then once more on
-    * top".  The default GL_MODULATE texture environment with vertex
-    * color (0,0,0,a) plus glBlendFunc(GL_SRC_ALPHA,
-    * GL_ONE_MINUS_SRC_ALPHA) darkens the destination to dst*(1-a),
-    * and the gl1 raster font driver's drop_x/drop_y path handles
-    * text shadows the same way, so this flag is honoured rather
-    * than clobbered. */
+    * run -- force that off so XMB falls back to the static gradient. */
    video_info->menu_shader_pipeline = 0;
 
    if (gl1->flags & GL1_FLAG_SHOULD_RESIZE)
