@@ -1047,7 +1047,6 @@ static void xmb_draw_icon(
    draw.coords          = &coords;
    draw.matrix_data     = &mymat_tmp;
    draw.texture         = texture;
-   draw.prim_type       = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
    draw.pipeline_id     = 0;
 
    if (shadows_enable)
@@ -7574,7 +7573,6 @@ static void xmb_draw_bg(
    draw.vertex               = NULL;
    draw.tex_coord            = NULL;
    draw.vertex_count         = 4;
-   draw.prim_type            = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
    draw.pipeline_id          = 0;
    draw.pipeline_active      = (menu_shader_pipeline == XMB_SHADER_PIPELINE_WALLPAPER) ? false : true;
 
@@ -7683,7 +7681,6 @@ static void xmb_draw_dark_layer(
    draw.tex_coord       = NULL;
    draw.vertex_count    = 4;
    draw.texture         = 0;
-   draw.prim_type       = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
    draw.pipeline_id     = 0;
    draw.pipeline_active = false;
 

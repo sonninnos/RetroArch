@@ -989,19 +989,11 @@ static void gfx_display_d3d8_draw(gfx_display_ctx_draw_t *draw,
 
    start = d3d->menu_display.offset;
 
-   /* Every caller in the codebase sets draw->prim_type to
-    * GFX_DISPLAY_PRIM_TRIANGLESTRIP, and the draw->coords vertices
-    * are laid out as a strip.  Hard-code D3DPT_TRIANGLESTRIP and the
-    * (vertices - 2) primitive-count formula here.  If a future
-    * caller passes TRIANGLES or another primitive type, this site
-    * will need to grow back into a switch -- but with no current
-    * non-tristrip caller, the dead branch was just buggy: it mapped
-    * TRIANGLES to D3DPT_TRIANGLESTRIP (the wrong type) and used
-    * count = vertices (the wrong count formula for D3D, which
-    * expects PrimitiveCount, not vertex count).
-    *
-    * Guard against vertices < 3 which would underflow the unsigned
-    * subtraction and pass a huge primitive count to the GPU. */
+   /* Menu draws issued by gfx_display always pass a triangle-strip layout
+    * (4 vertices = 2 triangles for a quad).  D3D8 expects PrimitiveCount,
+    * not vertex count, hence (vertices - 2).  Guard against vertices < 3
+    * which would underflow the unsigned subtraction and pass a huge
+    * primitive count to the GPU. */
    if (draw->coords->vertices < 3)
    {
       d3d->menu_display.offset += draw->coords->vertices;

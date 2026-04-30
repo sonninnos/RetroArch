@@ -2227,7 +2227,6 @@ static const NSUInteger kConstantAlignment = 4;
       {
          draw->coords          = &blank_coords;
          blank_coords.vertices = 4;
-         draw->prim_type       = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
          break;
       }
    }
@@ -2305,12 +2304,7 @@ static const NSUInteger kConstantAlignment = 4;
          [rce setVertexBytes:draw->backend_data length:draw->backend_data_size atIndex:BufferIndexUniforms];
          [rce setVertexBuffer:range.buffer offset:range.offset atIndex:BufferIndexPositions];
          [rce setFragmentBytes:draw->backend_data length:draw->backend_data_size atIndex:BufferIndexUniforms];
-         /* Every caller in the codebase sets draw->prim_type to
-          * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call mapping
-          * to MTLPrimitiveType that used to live in a private
-          * helper was dead.  Hard-code MTLPrimitiveTypeTriangleStrip;
-          * if a future caller passes TRIANGLES this will need to
-          * grow back into a switch. */
+         /* Menu draws use a triangle-strip layout. */
          [rce drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:vertex_count];
          return;
 #endif

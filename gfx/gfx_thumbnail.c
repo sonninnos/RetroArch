@@ -1102,7 +1102,6 @@ void gfx_thumbnail_draw(
       draw.coords          = &coords;
       draw.matrix_data     = &mymat;
       draw.texture         = thumb_texture;
-      draw.prim_type       = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
       draw.pipeline_id     = 0;
 
       /* Set thumbnail alignment within bounding box */

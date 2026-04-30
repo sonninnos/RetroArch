@@ -641,7 +641,6 @@ static void gfx_display_gl3_draw_pipeline(
                   + 3 * sizeof(float), &yflip, sizeof(yflip));
             draw->coords          = &blank_coords;
             blank_coords.vertices = 4;
-            draw->prim_type       = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
             break;
       }
    }
@@ -678,11 +677,7 @@ static void gfx_display_gl3_draw(gfx_display_ctx_draw_t *draw,
             draw->matrix_data ? (math_matrix_4x4*)draw->matrix_data
          : (math_matrix_4x4*)&gl->mvp_no_rot);
 
-      /* Every caller in the codebase sets draw->prim_type to
-       * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call switch on
-       * the primitive type that used to live here was dead.
-       * Hard-code GL_TRIANGLE_STRIP; if a future caller passes
-       * TRIANGLES this will need to grow back into a switch. */
+      /* Menu draws use a triangle-strip layout. */
       glDrawArrays(GL_TRIANGLE_STRIP, 0, draw->coords->vertices);
    }
 #ifdef HAVE_SLANG

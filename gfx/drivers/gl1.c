@@ -349,11 +349,7 @@ static void gfx_display_gl1_draw(gfx_display_ctx_draw_t *draw,
    glColorPointer(4, GL_FLOAT, 0, draw->coords->color);
    glTexCoordPointer(2, GL_FLOAT, 0, draw->coords->tex_coord);
 
-   /* Every caller in the codebase sets draw->prim_type to
-    * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call switch on the
-    * primitive type that used to live here was dead.  Hard-code
-    * GL_TRIANGLE_STRIP; if a future caller passes TRIANGLES this
-    * will need to grow back into a switch. */
+   /* Menu draws use a triangle-strip layout. */
    glDrawArrays(GL_TRIANGLE_STRIP, 0, draw->coords->vertices);
 
    glDisableClientState(GL_COLOR_ARRAY);

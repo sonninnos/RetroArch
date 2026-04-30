@@ -298,9 +298,8 @@ typedef struct vk
 
    struct
    {
-      /* Layout: every menu draw in the codebase uses
-       * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so this driver only keeps
-       * STRIP variants:
+      /* Layout: every menu draw uses a triangle-strip topology, so this
+       * driver only keeps STRIP variants:
        *   [0] alpha_blend, no blend
        *   [1] alpha_blend, blend
        *   [2] ribbon
@@ -309,11 +308,9 @@ typedef struct vk
        *   [5] snow
        *   [6] bokeh
        *   [7] snowflake
-       * All entries are TRIANGLE_STRIP topology.  The history of
-       * this array previously included parallel TRIANGLE_LIST
-       * variants in even slots, but no caller ever set prim_type to
-       * anything other than TRIANGLESTRIP, so the LIST pipelines
-       * were built and never used. */
+       * All entries are TRIANGLE_STRIP topology.  The history of this
+       * array previously included parallel TRIANGLE_LIST variants in
+       * even slots; they were built at init and never used. */
       VkPipeline pipelines[8];
 #ifdef VULKAN_HDR_SWAPCHAIN
       VkPipeline pipelines_sdr[8]; /* SDR offscreen variants, same layout */
@@ -1893,7 +1890,6 @@ static void gfx_display_vk_draw_pipeline(
                + 3 * sizeof(float), &yflip, sizeof(yflip));
          draw->coords          = &blank_coords;
          blank_coords.vertices = 4;
-         draw->prim_type       = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
          break;
    }
 

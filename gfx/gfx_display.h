@@ -83,13 +83,6 @@ enum menu_driver_id_type
    MENU_DRIVER_ID_XMB
 };
 
-enum gfx_display_prim_type
-{
-   GFX_DISPLAY_PRIM_NONE = 0,
-   GFX_DISPLAY_PRIM_TRIANGLESTRIP,
-   GFX_DISPLAY_PRIM_TRIANGLES
-};
-
 enum gfx_display_driver_type
 {
    GFX_VIDEO_DRIVER_GENERIC = 0,
@@ -165,7 +158,6 @@ struct gfx_display_ctx_draw
    float y;
    float rotation;
    float scale_factor;
-   enum gfx_display_prim_type prim_type;
    bool pipeline_active;
 };
 

@@ -2634,7 +2634,6 @@ static void materialui_draw_icon(
    draw.coords          = &coords;
    draw.matrix_data     = mymat;
    draw.texture         = texture;
-   draw.prim_type       = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
    draw.pipeline_id     = 0;
 
    if (dispctx)
@@ -6203,7 +6202,6 @@ static void materialui_render_background(
    draw.height                = video_height;
    draw.coords                = NULL;
    draw.matrix_data           = NULL;
-   draw.prim_type             = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
    draw.vertex                = NULL;
    draw.tex_coord             = NULL;
    draw.vertex_count          = 4;

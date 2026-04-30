@@ -1083,12 +1083,10 @@ static void gfx_display_d3d9_hlsl_draw(gfx_display_ctx_draw_t *draw,
 
    start = d3d->menu_display.offset;
 
-   /* Every caller in the codebase sets draw->prim_type to
-    * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call switch on the
-    * primitive type that used to live here was dead.  See the
-    * matching comment in d3d8.c's gfx_display_d3d8_draw for why we
-    * also harden against vertices < 3 (the tristrip count formula
-    * vertices - 2 underflows the unsigned subtraction otherwise). */
+   /* Menu draws use a triangle-strip layout.  Harden against vertices < 3
+    * (the count formula vertices - 2 would otherwise underflow the
+    * unsigned subtraction and pass a huge primitive count to the GPU --
+    * see d3d8.c for the matching guard). */
    if (draw->coords->vertices < 3)
    {
       d3d->menu_display.offset += draw->coords->vertices;
@@ -1243,7 +1241,6 @@ static void gfx_display_d3d9_hlsl_draw_pipeline(
           * ca->coords.vertices (which ribbon needs at 8064). */
          blank_coords.vertices = 4;
          draw->coords          = &blank_coords;
-         draw->prim_type = GFX_DISPLAY_PRIM_TRIANGLESTRIP;
 
          /* Set blend state for particle effects */
          IDirect3DDevice9_SetRenderState(d3d->dev,
