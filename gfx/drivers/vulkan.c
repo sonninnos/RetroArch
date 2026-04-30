@@ -215,10 +215,6 @@ struct vk_draw_triangles
    VkSampler sampler;            /* ptr alignment */
    size_t uniform_size;
    unsigned vertices;
-   /* When true, vertices are groups of 4 (quads) and will be
-    * drawn with the shared index buffer via vkCmdDrawIndexed.
-    * When false, vertices are drawn directly via vkCmdDraw. */
-   bool indexed_quads;
 };
 
 typedef struct vk
@@ -958,29 +954,7 @@ static void vulkan_draw_triangles(vk_t *vk, const struct vk_draw_triangles *call
    vkCmdBindVertexBuffers(vk->cmd, 0, 1,
          &call->vbo->buffer, &call->vbo->offset);
 
-   /* Use indexed draw for quad-based geometry.
-    * Quads use 4 vertices each with the shared index buffer,
-    * saving 33% VBO bandwidth compared to 6 vertices per quad. */
-   if (call->indexed_quads && vk->quad_ibo.buffer != VK_NULL_HANDLE)
-   {
-      unsigned num_quads   = call->vertices / 4;
-      /* Guard against exceeding IBO capacity to prevent
-       * out-of-bounds index reads
-       * (VUID-vkCmdDrawIndexed-indexSize-00463). */
-      if (num_quads <= vk->quad_ibo.num_quads)
-      {
-         unsigned index_count = num_quads * 6;
-         vkCmdBindIndexBuffer(vk->cmd, vk->quad_ibo.buffer,
-               0, VK_INDEX_TYPE_UINT16);
-         vkCmdDrawIndexed(vk->cmd, index_count, 1, 0, 0, 0);
-      }
-      else
-         vkCmdDraw(vk->cmd, call->vertices, 1, 0, 0);
-   }
-   else
-   {
-      vkCmdDraw(vk->cmd, call->vertices, 1, 0, 0);
-   }
+   vkCmdDraw(vk->cmd, call->vertices, 1, 0, 0);
 }
 
 
@@ -2018,7 +1992,6 @@ static void gfx_display_vk_draw(gfx_display_ctx_draw_t *draw,
             call.uniform_size = draw->backend_data_size;
             call.vbo          = &range;
             call.vertices     = draw->coords->vertices;
-            call.indexed_quads = false;
 
             vulkan_draw_triangles(vk, &call);
          }
@@ -2051,7 +2024,6 @@ static void gfx_display_vk_draw(gfx_display_ctx_draw_t *draw,
             call.uniform_size = sizeof(math_matrix_4x4);
             call.vbo          = &range;
             call.vertices     = draw->coords->vertices;
-            call.indexed_quads = false;
 
             vulkan_draw_triangles(vk, &call);
          }
@@ -2536,7 +2508,6 @@ static void vulkan_font_render_msg(
     * Vulkan commands directly we eliminate:
     *   - packing/unpacking through struct vk_draw_triangles
     *   - the generic vulkan_draw_triangles() indirection
-    *   - the runtime branch on indexed_quads (always true for fonts)
     *   - the null-check on texture->image (always valid for fonts)
     */
 
