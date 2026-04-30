@@ -23,6 +23,8 @@
 #include <retro_environment.h>
 #include <boolean.h>
 
+#include "../video_defines.h"
+
 typedef struct gdi
 {
 #ifndef __WINRT__
@@ -101,6 +103,25 @@ typedef struct gdi
     * still pushes a 16-bit pixel buffer via set_texture_frame and
     * lives in the gdi->menu_frame path. */
    bool menu_textured_active;
+
+   /* Aspect-ratio-aware viewport.  full_width/full_height hold the
+    * window size; x/y/width/height hold the destination rect for
+    * the core frame inside the window after applying aspect ratio
+    * settings (Settings → Video → Scaling → Aspect Ratio).  Mirrors
+    * the d3d8/d3d9 vp pattern: video_driver_update_viewport fills
+    * this in, the frame's StretchBlt/StretchDIBits uses x/y/width/
+    * height as its destination, and the area outside that rect is
+    * cleared to black to produce letterbox/pillarbox bars.
+    *
+    * keep_aspect is set from video_info->force_aspect at init time
+    * and toggled to true when the user changes aspect ratio.
+    *
+    * should_resize is the dirty flag: window-resize / aspect-ratio
+    * changes / state-change pokes set it, gdi_frame consumes it by
+    * recomputing the viewport at the start of the next frame. */
+   video_viewport_t vp;
+   bool keep_aspect;
+   bool should_resize;
 } gdi_t;
 
 #endif

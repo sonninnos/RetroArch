@@ -115,6 +115,10 @@ static void gdi_release_brush(gdi_t *gdi);
 static bool gdi_ensure_menu_surface(gdi_t *gdi,
       unsigned width, unsigned height);
 static void gdi_release_menu_surface(gdi_t *gdi);
+/* Defined alongside the vtable near the bottom of the file, but
+ * gdi_frame calls it through the should_resize path. */
+static void gdi_set_viewport(void *data, unsigned vp_width, unsigned vp_height,
+      bool force_full, bool allow_rotate);
 
 /* Convert a [0..1] float colour component to a [0..255] byte,
  * clamping defensively (animation interpolators occasionally
@@ -391,8 +395,12 @@ static void gdi_upload_core_frame_to_menu(gdi_t *gdi,
    else
       info.header.biCompression = BI_RGB;
 
+   /* Destination rect is the viewport (game area), not the full
+    * bmp_menu surface.  The surrounding pillarbox/letterbox area
+    * was already cleared to black in Step 4, so we leave it
+    * untouched and the bars appear automatically. */
    StretchDIBits(gdi->memDC,
-         0, 0, gdi->menu_surface_width, gdi->menu_surface_height,
+         gdi->vp.x, gdi->vp.y, gdi->vp.width, gdi->vp.height,
          0, 0, frame_w, frame_h,
          src, (BITMAPINFO*)&info, DIB_RGB_COLORS, SRCCOPY);
 }
@@ -2109,6 +2117,14 @@ static void *gdi_init(const video_info_t *video,
    else
       gdi->video_pitch                  = video->width * 2;
 
+   /* Aspect-ratio handling.  Pulled from video_info_t at init the
+    * same way d3d8/d3d9 do it; the user can override via the
+    * set_aspect_ratio poke (which forces keep_aspect = true and
+    * dirties the viewport).  should_resize starts true so the
+    * first frame computes a real viewport before any present. */
+   gdi->keep_aspect                     = video->force_aspect;
+   gdi->should_resize                   = true;
+
    gdi_create(gdi);
    if (!gfx_ctx_gdi_init())
       goto error;
@@ -2270,6 +2286,32 @@ static bool gdi_frame(void *data, const void *frame,
 
    gdi->screen_width  = surface_width;
    gdi->screen_height = surface_height;
+
+   /* --- Step 2b: recompute the aspect-ratio-aware viewport when
+    * something has dirtied it.  Triggers: window resize (caught in
+    * gdi_alive), aspect-ratio change (set_aspect_ratio poke), or
+    * generic state change (apply_state_changes poke).  The
+    * resulting gdi->vp.{x,y,width,height} is the destination rect
+    * for the core frame inside the window; everything outside it
+    * is filled black at present time to produce letterbox /
+    * pillarbox bars.  Mirrors d3d8's should_resize pattern. */
+   if (gdi->should_resize)
+   {
+      gdi_set_viewport(gdi, surface_width, surface_height, false, true);
+      gdi->should_resize = false;
+   }
+   /* Defensive: if vp was never populated (e.g. should_resize
+    * cleared without us recomputing), fall back to full-window
+    * destination so we still draw something. */
+   if (gdi->vp.width == 0 || gdi->vp.height == 0)
+   {
+      gdi->vp.x           = 0;
+      gdi->vp.y           = 0;
+      gdi->vp.width       = surface_width;
+      gdi->vp.height      = surface_height;
+      gdi->vp.full_width  = surface_width;
+      gdi->vp.full_height = surface_height;
+   }
 
    /* --- Step 3: detect whether any window-resolution content needs
     * to be composited this frame.  Three triggers:
@@ -2534,19 +2576,23 @@ static bool gdi_frame(void *data, const void *frame,
 
       if (gdi->menu_textured_active && gdi->bmp_menu)
       {
-         /* bmp_menu is already selected (Step 4).  StretchDIBits
-          * upscales the small source frame to the window-sized
-          * surface; the widget / OSD draws that follow then land
-          * on top at native resolution. */
+         /* bmp_menu is already selected (Step 4) and was cleared
+          * to black, so any pixels outside the viewport rect stay
+          * black — that's the letterbox/pillarbox.  StretchDIBits
+          * goes into the viewport sub-rect; widget / OSD draws
+          * that follow then land at native resolution on top of
+          * the upscaled image (and on top of the bars, which is
+          * fine — widgets are positioned in window space). */
          StretchDIBits(gdi->memDC,
-               0, 0, gdi->menu_surface_width, gdi->menu_surface_height,
+               gdi->vp.x, gdi->vp.y, gdi->vp.width, gdi->vp.height,
                0, 0, width, height,
                frame_to_copy, (BITMAPINFO*)&info, DIB_RGB_COLORS, SRCCOPY);
       }
       else
       {
          /* Legacy path: native-size copy into gdi->bmp; WM_PAINT
-          * does the scaling at present time. */
+          * does the scaling AND viewport letterboxing at present
+          * time. */
          gdi->bmp_old = (HBITMAP)SelectObject(gdi->memDC, gdi->bmp);
          StretchDIBits(gdi->memDC, 0, 0, width, height, 0, 0, width, height,
                frame_to_copy, (BITMAPINFO*)&info, DIB_RGB_COLORS, SRCCOPY);
@@ -2689,6 +2735,9 @@ static bool gdi_alive(void *data)
             &quit, &resize, &temp_width, &temp_height);
 
    ret = !quit;
+
+   if (resize)
+      gdi->should_resize = true;
 
    if (temp_width != 0 && temp_height != 0)
    {
@@ -2913,6 +2962,22 @@ static bool gdi_gfx_widgets_enabled(void *data) { (void)data; return true; }
 
 
 
+static void gdi_set_aspect_ratio(void *data, unsigned aspect_ratio_idx)
+{
+   gdi_t *gdi = (gdi_t*)data;
+   if (!gdi)
+      return;
+   gdi->keep_aspect   = true;
+   gdi->should_resize = true;
+}
+
+static void gdi_apply_state_changes(void *data)
+{
+   gdi_t *gdi = (gdi_t*)data;
+   if (gdi)
+      gdi->should_resize = true;
+}
+
 static const video_poke_interface_t gdi_poke_interface = {
    gdi_get_flags,
    gdi_load_texture,
@@ -2925,8 +2990,8 @@ static const video_poke_interface_t gdi_poke_interface = {
    NULL, /* get_video_output_next - handled by display server */
    NULL, /* get_current_framebuffer */
    NULL, /* get_proc_address */
-   NULL, /* set_aspect_ratio */
-   NULL, /* apply_state_changes */
+   gdi_set_aspect_ratio,
+   gdi_apply_state_changes,
    gdi_set_texture_frame,
    gdi_set_texture_enable,
    font_driver_render_msg,
@@ -2944,8 +3009,24 @@ static const video_poke_interface_t gdi_poke_interface = {
 
 static void gdi_get_poke_interface(void *data,
       const video_poke_interface_t **iface) { *iface = &gdi_poke_interface; }
+/* Recompute the destination rect (gdi->vp.x/y/width/height) for
+ * the core frame inside the window based on the current aspect
+ * ratio settings.  Called from gdi_frame when should_resize is
+ * set, mirroring d3d8 / d3d9 timing.  vp.full_width/full_height
+ * must already hold the current window size (the caller refreshes
+ * those via gfx_ctx_gdi_get_video_size first). */
 static void gdi_set_viewport(void *data, unsigned vp_width, unsigned vp_height,
-      bool force_full, bool allow_rotate) { }
+      bool force_full, bool allow_rotate)
+{
+   gdi_t *gdi = (gdi_t*)data;
+   if (!gdi)
+      return;
+
+   gdi->vp.full_width  = vp_width;
+   gdi->vp.full_height = vp_height;
+
+   video_driver_update_viewport(&gdi->vp, force_full, gdi->keep_aspect, true);
+}
 
 video_driver_t video_gdi = {
    gdi_init,
