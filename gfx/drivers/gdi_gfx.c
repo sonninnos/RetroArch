@@ -3066,6 +3066,36 @@ static void gdi_set_viewport(void *data, unsigned vp_width, unsigned vp_height,
    video_driver_update_viewport(&gdi->vp, force_full, gdi->keep_aspect, true);
 }
 
+/* Hand a snapshot of the current viewport back to the caller.
+ *
+ * Many subsystems call into video_driver_get_viewport_info() to
+ * read viewport / window dimensions — most importantly the menu's
+ * "Custom Aspect Ratio" handlers, which read vp.full_width /
+ * vp.full_height to compute width-from-x / height-from-y for the
+ * custom viewport.
+ *
+ * Without this hookup video_driver_get_viewport_info silently
+ * returns false; that contract is now also strengthened on the
+ * API side (the function zero-fills the output struct so callers
+ * that ignore the return value at least read zeros rather than
+ * stack garbage), but implementing it properly here is still the
+ * right thing to do.  Mirrors d3d8_viewport_info /
+ * d3d9_hlsl_viewport_info. */
+static void gdi_viewport_info(void *data, struct video_viewport *vp)
+{
+   gdi_t *gdi = (gdi_t*)data;
+
+   if (!gdi || !vp)
+      return;
+
+   vp->x           = gdi->vp.x;
+   vp->y           = gdi->vp.y;
+   vp->width       = gdi->vp.width;
+   vp->height      = gdi->vp.height;
+   vp->full_width  = gdi->vp.full_width;
+   vp->full_height = gdi->vp.full_height;
+}
+
 #ifdef HAVE_OVERLAY
 /*
  * INPUT OVERLAY DRIVER
@@ -3420,7 +3450,7 @@ video_driver_t video_gdi = {
    "gdi",
    gdi_set_viewport,
    NULL, /* set_rotation */
-   NULL, /* viewport_info */
+   gdi_viewport_info,
    NULL, /* read_viewport */
    NULL, /* read_frame_raw */
 #ifdef HAVE_OVERLAY
