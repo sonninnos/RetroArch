@@ -2197,13 +2197,6 @@ static const NSUInteger kConstantAlignment = 4;
    [_context resetScissorRect];
 }
 
-- (MTLPrimitiveType)_toPrimitiveType:(enum gfx_display_prim_type)prim
-{
-   if (prim == GFX_DISPLAY_PRIM_TRIANGLESTRIP)
-      return MTLPrimitiveTypeTriangleStrip;
-   return MTLPrimitiveTypeTriangle;
-}
-
 - (void)drawPipeline:(gfx_display_ctx_draw_t *)draw
 {
    static struct video_coords blank_coords;
@@ -2312,7 +2305,13 @@ static const NSUInteger kConstantAlignment = 4;
          [rce setVertexBytes:draw->backend_data length:draw->backend_data_size atIndex:BufferIndexUniforms];
          [rce setVertexBuffer:range.buffer offset:range.offset atIndex:BufferIndexPositions];
          [rce setFragmentBytes:draw->backend_data length:draw->backend_data_size atIndex:BufferIndexUniforms];
-         [rce drawPrimitives:[self _toPrimitiveType:draw->prim_type] vertexStart:0 vertexCount:vertex_count];
+         /* Every caller in the codebase sets draw->prim_type to
+          * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call mapping
+          * to MTLPrimitiveType that used to live in a private
+          * helper was dead.  Hard-code MTLPrimitiveTypeTriangleStrip;
+          * if a future caller passes TRIANGLES this will need to
+          * grow back into a switch. */
+         [rce drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:vertex_count];
          return;
 #endif
       default:
