@@ -2183,6 +2183,7 @@ bool vulkan_create_swapchain(gfx_ctx_vulkan_data_t *vk,
                   && formats[i].colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
                {
                   format = formats[i];
+                  vk->context.flags |= VK_CTX_FLAG_HDR_SCRGB;
                   RARCH_LOG("[Vulkan] Selecting R16G16B16A16_SFLOAT swapchain with scRGB colour space.\n");
                   break;
                }
@@ -2448,6 +2449,30 @@ bool vulkan_create_swapchain(gfx_ctx_vulkan_data_t *vk,
    if (old_swapchain == VK_NULL_HANDLE)
       RARCH_LOG("[Vulkan] Got %u swapchain images.\n",
             vk->context.num_swapchain_images);
+
+   /* Pre-create the per-image present-side semaphores up-front for every
+    * image in the new swapchain.  vulkan_acquire_next_image only allocates
+    * swapchain_semaphores[index] for the image actually returned by
+    * vkAcquireNextImageKHR, leaving slots for not-yet-acquired images at
+    * VK_NULL_HANDLE.  On the swapchain recreate path the prior teardown
+    * memsets the array to zero, and at least one path through the recreate
+    * can reach vulkan_present with current_swapchain_index pointing at an
+    * image whose slot has not yet been re-populated.  NVIDIA real-FSE on
+    * Win11 then segfaults inside vkQueuePresentKHR when handed
+    * VK_NULL_HANDLE in pWaitSemaphores. */
+   {
+      VkSemaphoreCreateInfo sem_info_pre;
+      unsigned sem_idx;
+      sem_info_pre.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+      sem_info_pre.pNext = NULL;
+      sem_info_pre.flags = 0;
+      for (sem_idx = 0; sem_idx < vk->context.num_swapchain_images; sem_idx++)
+      {
+         if (vk->context.swapchain_semaphores[sem_idx] == VK_NULL_HANDLE)
+            vkCreateSemaphore(vk->context.device, &sem_info_pre,
+                  NULL, &vk->context.swapchain_semaphores[sem_idx]);
+      }
+   }
 
    /* Force driver to reset swapchain image handles. */
    vk->context.flags                 |=  VK_CTX_FLAG_INVALID_SWAPCHAIN;
