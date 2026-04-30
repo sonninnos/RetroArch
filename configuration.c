@@ -3589,6 +3589,8 @@ static bool check_menu_driver_compatibility(settings_t *settings)
                 || (memcmp(video_driver, "glcore", 6) == 0 && video_driver[6] == '\0');
          if (video_driver[1] == 'x')
             return (memcmp(video_driver, "gx2",    3) == 0 && video_driver[3] == '\0');
+         if (video_driver[1] == 'd')
+            return (memcmp(video_driver, "gdi",    3) == 0 && video_driver[3] == '\0');
          return false;
       case 'v':
          return (memcmp(video_driver, "vulkan", 6) == 0 && video_driver[6] == '\0')

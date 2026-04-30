@@ -37,6 +37,34 @@ typedef struct gdi
    uint8_t *menu_frame;
    size_t menu_frame_cap;
 
+   /* Backing bitmap for the menu/widget compositing surface.
+    * Distinct from gdi->bmp (which is a DDB sized to the core
+    * frame): bmp_menu is a top-down 32-bit BGRA DIB section sized
+    * to the *window* surface, pre-multiplied alpha-ready, used as
+    * the back buffer when XMB/Ozone/MaterialUI or widgets draw via
+    * gfx_display_ctx_gdi. The DIB lets us do fast solid-color
+    * fills (FillRect + cached brush) and AlphaBlend composites
+    * without round-tripping through DDB conversion every frame. */
+   HBITMAP bmp_menu;
+   HBITMAP bmp_menu_old;
+   uint32_t *menu_pixels;          /* DIB-backing pointer; currently unused but kept for potential direct-access fast paths. */
+   unsigned menu_surface_width;
+   unsigned menu_surface_height;
+
+   /* Pre-allocated brushes for solid-fill quads. The current brush is
+    * cached and reused when consecutive quads share a colour, which
+    * is common (Ozone draws hundreds of background quads in the
+    * same theme colour per frame). */
+   HBRUSH brush_cached;
+   COLORREF brush_color_cached;
+   bool brush_color_cached_valid;
+
+   /* Scissor stack for gfx_display_ctx_gdi_scissor_{begin,end}. GDI
+    * clip regions don't nest natively, so we save/restore the DC
+    * clip region across begin/end. */
+   int  scissor_saved;
+   bool scissor_active;
+
    unsigned video_width;
    unsigned video_height;
    unsigned screen_width;
@@ -46,6 +74,14 @@ typedef struct gdi
     * from video_width / video_height which is the core's frame size. */
    unsigned full_width;
    unsigned full_height;
+   /* Actual size of gdi->bmp (the DDB).  Separate from video_width
+    * because when RGUI is active we draw the menu (a different size
+    * than the core) into bmp; without a dedicated tracker, the
+    * comparison against video_width would trigger a destructive
+    * DeleteObject + CreateCompatibleBitmap on every frame, racing
+    * with WM_PAINT and producing visible flicker. */
+   unsigned bmp_width;
+   unsigned bmp_height;
 
    unsigned menu_width;
    unsigned menu_height;
@@ -60,6 +96,11 @@ typedef struct gdi
    bool lte_win98;
    bool menu_enable;
    bool menu_full_screen;
+   /* True while a textured menu (XMB/Ozone/MaterialUI) is being
+    * composited onto bmp_menu in gfx_display_ctx_gdi_draw. RGUI
+    * still pushes a 16-bit pixel buffer via set_texture_frame and
+    * lives in the gdi->menu_frame path. */
+   bool menu_textured_active;
 } gdi_t;
 
 #endif

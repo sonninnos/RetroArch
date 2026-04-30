@@ -1353,7 +1353,11 @@ LRESULT CALLBACK wnd_proc_gdi_dinput(HWND hwnd, UINT message,
       {
          gdi->bmp_old    = (HBITMAP)SelectObject(gdi->memDC, gdi->bmp);
 
-         /* Draw video content */
+         /* Draw video content.  Source rect uses bmp_width /
+          * bmp_height (the DDB's actual size), not video_width /
+          * video_height — when RGUI is alive, bmp holds the menu
+          * image at the menu's resolution while video_width still
+          * tracks the core. */
          StretchBlt(
                gdi->winDC,
                0,
@@ -1363,8 +1367,8 @@ LRESULT CALLBACK wnd_proc_gdi_dinput(HWND hwnd, UINT message,
                gdi->memDC,
                0,
                0,
-               gdi->video_width,
-               gdi->video_height,
+               gdi->bmp_width  ? gdi->bmp_width  : gdi->video_width,
+               gdi->bmp_height ? gdi->bmp_height : gdi->video_height,
                SRCCOPY);
 
          SelectObject(gdi->memDC, gdi->bmp_old);
@@ -1389,7 +1393,11 @@ LRESULT CALLBACK wnd_proc_gdi_winraw(HWND hwnd, UINT message,
       {
          gdi->bmp_old    = (HBITMAP)SelectObject(gdi->memDC, gdi->bmp);
 
-         /* Draw video content */
+         /* Draw video content.  Source rect uses bmp_width /
+          * bmp_height (the DDB's actual size), not video_width /
+          * video_height — when RGUI is alive, bmp holds the menu
+          * image at the menu's resolution while video_width still
+          * tracks the core. */
          StretchBlt(
                gdi->winDC,
                0,
@@ -1399,8 +1407,8 @@ LRESULT CALLBACK wnd_proc_gdi_winraw(HWND hwnd, UINT message,
                gdi->memDC,
                0,
                0,
-               gdi->video_width,
-               gdi->video_height,
+               gdi->bmp_width  ? gdi->bmp_width  : gdi->video_width,
+               gdi->bmp_height ? gdi->bmp_height : gdi->video_height,
                SRCCOPY);
 
          SelectObject(gdi->memDC, gdi->bmp_old);
@@ -1424,7 +1432,11 @@ LRESULT CALLBACK wnd_proc_gdi_common(HWND hwnd, UINT message,
       {
          gdi->bmp_old    = (HBITMAP)SelectObject(gdi->memDC, gdi->bmp);
 
-         /* Draw video content */
+         /* Draw video content.  Source rect uses bmp_width /
+          * bmp_height (the DDB's actual size), not video_width /
+          * video_height — when RGUI is alive, bmp holds the menu
+          * image at the menu's resolution while video_width still
+          * tracks the core. */
          StretchBlt(
                gdi->winDC,
                0,
@@ -1434,8 +1446,8 @@ LRESULT CALLBACK wnd_proc_gdi_common(HWND hwnd, UINT message,
                gdi->memDC,
                0,
                0,
-               gdi->video_width,
-               gdi->video_height,
+               gdi->bmp_width  ? gdi->bmp_width  : gdi->video_width,
+               gdi->bmp_height ? gdi->bmp_height : gdi->video_height,
                SRCCOPY);
 
          SelectObject(gdi->memDC, gdi->bmp_old);
