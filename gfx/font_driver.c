@@ -160,7 +160,8 @@ static bool font_init_first(
             }
          }
 #endif
-#if defined(HAVE_SDL2) && SDL_VERSION_ATLEAST(2, 0, 18)
+#ifdef HAVE_SDL2
+#if SDL_VERSION_ATLEAST(2, 0, 18)
       case FONT_DRIVER_RENDER_SDL2:
          {
             void *data = sdl2_raster_font.init(video_data,
@@ -173,6 +174,7 @@ static bool font_init_first(
             }
          }
          break;
+#endif
 #endif
 #ifdef HAVE_D3D8
       case FONT_DRIVER_RENDER_D3D8_API:

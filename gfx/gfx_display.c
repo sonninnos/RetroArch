@@ -111,8 +111,10 @@ static gfx_display_ctx_driver_t *gfx_display_ctx_drivers[] = {
    &gfx_display_ctx_gdi,
 #endif
 #endif
-#if defined(HAVE_SDL2) && SDL_VERSION_ATLEAST(2, 0, 18)
+#ifdef HAVE_SDL2
+#if SDL_VERSION_ATLEAST(2, 0, 18)
    &gfx_display_ctx_sdl2,
+#endif
 #endif
    NULL,
 };
