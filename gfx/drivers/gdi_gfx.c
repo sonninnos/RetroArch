@@ -3106,7 +3106,8 @@ static bool gdi_frame(void *data, const void *frame,
     * Two cases:
     *   - menu_textured_active (textured menu OR widgets/OSD/stats
     *     present): bmp_menu holds the final image at window size.
-    *     Manually BitBlt to winDC and ValidateRect.
+    *     Hand the DIB pixel buffer straight to SetDIBitsToDevice
+    *     and ValidateRect.
     *   - Otherwise (just core, just RGUI): bmp holds the final
     *     image at native size.  InvalidateRect → WM_PAINT does the
     *     StretchBlt to the window.  This single-target,
@@ -3114,25 +3115,45 @@ static bool gdi_frame(void *data, const void *frame,
     *     does not flicker. */
    if (gdi->winDC)
    {
-      if (gdi->menu_textured_active && gdi->bmp_menu)
+      if (gdi->menu_textured_active && gdi->bmp_menu && gdi->menu_pixels)
       {
-         HDC menu_dc = CreateCompatibleDC(gdi->winDC);
-         if (menu_dc)
-         {
-            HBITMAP menu_old = (HBITMAP)SelectObject(menu_dc, gdi->bmp_menu);
-            /* Drain GDI's batch queue so all draws into bmp_menu
-             * (FillRect, AlphaBlend, GradientFill, font glyph
-             * blits, etc.) have actually committed to the
-             * underlying DIB section before we sample it.  Without
-             * this, the BitBlt below can read a stale snapshot
-             * and produce missing-draw artifacts. */
-            GdiFlush();
-            BitBlt(gdi->winDC,
-                  0, 0, surface_width, surface_height,
-                  menu_dc, 0, 0, SRCCOPY);
-            SelectObject(menu_dc, menu_old);
-            DeleteDC(menu_dc);
-         }
+         /* SetDIBitsToDevice takes the raw DIB pixel buffer
+          * (gdi->menu_pixels) directly, skipping the round-trip
+          * through a temporary CreateCompatibleDC / SelectObject /
+          * BitBlt / DeleteDC sequence.  No scaling is involved
+          * here — bmp_menu was allocated at exactly
+          * surface_width x surface_height — so the no-stretch
+          * SetDIBitsToDevice form fits perfectly.
+          *
+          * The DIB is top-down (biHeight = -surface_height in
+          * gdi_ensure_menu_surface), so we pass a top-down
+          * BITMAPINFOHEADER here too and StartScan / cLines
+          * count from row 0 down.  Available since Windows 95,
+          * so no compatibility regression vs the previous BitBlt
+          * path.
+          *
+          * GdiFlush before sampling: bmp_menu was the selected
+          * draw target up to step 13.  Direct-access reads
+          * (which is what SetDIBitsToDevice does — it reads
+          * lpvBits straight) need the GDI command queue drained
+          * so all prior FillRect / AlphaBlend / etc. calls have
+          * actually committed to the underlying pixel buffer.
+          * Without this, sporadic missing-draw artifacts. */
+         BITMAPINFO bmi;
+         memset(&bmi, 0, sizeof(bmi));
+         bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+         bmi.bmiHeader.biWidth       = (LONG)surface_width;
+         bmi.bmiHeader.biHeight      = -(LONG)surface_height;
+         bmi.bmiHeader.biPlanes      = 1;
+         bmi.bmiHeader.biBitCount    = 32;
+         bmi.bmiHeader.biCompression = BI_RGB;
+
+         GdiFlush();
+         SetDIBitsToDevice(gdi->winDC,
+               0, 0, surface_width, surface_height,
+               0, 0, 0, surface_height,
+               gdi->menu_pixels, &bmi, DIB_RGB_COLORS);
+
          /* We just painted everything; suppress the WM_PAINT that
           * the legacy code path would otherwise queue. */
          ValidateRect(hwnd, NULL);

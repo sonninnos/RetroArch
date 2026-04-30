@@ -49,7 +49,7 @@ typedef struct gdi
     * without round-tripping through DDB conversion every frame. */
    HBITMAP bmp_menu;
    HBITMAP bmp_menu_old;
-   uint32_t *menu_pixels;          /* DIB-backing pointer; currently unused but kept for potential direct-access fast paths. */
+   uint32_t *menu_pixels;          /* DIB-backing pointer; passed straight to SetDIBitsToDevice in the present path. */
    unsigned menu_surface_width;
    unsigned menu_surface_height;
 
