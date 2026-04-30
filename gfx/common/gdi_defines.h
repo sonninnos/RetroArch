@@ -122,6 +122,29 @@ typedef struct gdi
    video_viewport_t vp;
    bool keep_aspect;
    bool should_resize;
+
+#ifdef HAVE_OVERLAY
+   /* On-screen input overlay state.  Each entry holds an HBITMAP
+    * DIB section (32-bit BGRA, premultiplied alpha) that's
+    * AlphaBlend'd into the active compositing target every frame.
+    * vert_coords and tex_coords match the d3d8/d3d9 layout: each
+    * is a 4-float (x, y, w, h) tuple in 0..1 space (window space
+    * for vert when fullscreen, viewport space otherwise; texture
+    * space for tex).  vertex_geom flips y the same way d3d8 does
+    * to keep the same on-screen behaviour. */
+   struct gdi_overlay
+   {
+      HBITMAP   bmp;
+      unsigned  tex_w;
+      unsigned  tex_h;
+      float     tex_coords[4];
+      float     vert_coords[4];
+      float     alpha_mod;
+      bool      fullscreen;
+   } *overlays;
+   unsigned overlays_size;
+   bool overlays_enabled;
+#endif
 } gdi_t;
 
 #endif

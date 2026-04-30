@@ -119,6 +119,14 @@ static void gdi_release_menu_surface(gdi_t *gdi);
  * gdi_frame calls it through the should_resize path. */
 static void gdi_set_viewport(void *data, unsigned vp_width, unsigned vp_height,
       bool force_full, bool allow_rotate);
+#ifdef HAVE_OVERLAY
+/* Overlay impl lives near the bottom alongside the vtable; gdi_frame
+ * composites overlays during Step 10b and gdi_free has to release
+ * the DIB sections before the texDC goes away. */
+static void gdi_overlay_free(gdi_t *gdi);
+static void gdi_overlays_render(gdi_t *gdi,
+      unsigned surface_width, unsigned surface_height);
+#endif
 
 /* Convert a [0..1] float colour component to a [0..255] byte,
  * clamping defensively (animation interpolators occasionally
@@ -2350,6 +2358,16 @@ static bool gdi_frame(void *data, const void *frame,
       if (widgets_active)
          need_bmp_menu = true;
 #endif
+#ifdef HAVE_OVERLAY
+      /* Active input overlay: same reasoning as widgets — the
+       * overlay is window-resolution content (button images sized
+       * to window), so it has to land on bmp_menu rather than
+       * being drawn into the small core-frame bmp and smeared
+       * during WM_PAINT scaling. */
+      if (gdi->overlays_enabled
+            && gdi->overlays && gdi->overlays_size > 0)
+         need_bmp_menu = true;
+#endif
       if (msg && msg[0] != '\0')
          need_bmp_menu = true;
       if (show_stats)
@@ -2614,6 +2632,19 @@ static bool gdi_frame(void *data, const void *frame,
    if (show_stats)
       font_driver_render_msg(gdi, stat_text, osd_params, NULL);
 
+   /* --- Step 10b: input overlay (touch / virtual gamepad images).
+    *
+    * Rendered between stats and widgets, matching the d3d8 / d3d9
+    * order so overlapping widget notifications can still paint
+    * over the buttons (rare in practice — widgets land in their
+    * own corner — but keeping the layering consistent across
+    * backends means an overlay-on-d3d9 config carries over here
+    * unchanged). */
+#ifdef HAVE_OVERLAY
+   if (gdi->overlays_enabled)
+      gdi_overlays_render(gdi, surface_width, surface_height);
+#endif
+
    /* --- Step 11: render widgets.  Widgets are drawn through the
     * same gfx_display_ctx_gdi_draw path that the menu uses, but they
     * always paint after the core/menu base.
@@ -2774,6 +2805,13 @@ static void gdi_free(void *data)
     * the DC it's selected into goes away. */
    gdi_release_menu_surface(gdi);
    gdi_release_brush(gdi);
+
+#ifdef HAVE_OVERLAY
+   /* Overlay DIB sections must be released before texDC goes away
+    * — they may have been selected into it during the last
+    * render. */
+   gdi_overlay_free(gdi);
+#endif
 
    if (gdi->bmp)
       DeleteObject(gdi->bmp);
@@ -3028,6 +3066,347 @@ static void gdi_set_viewport(void *data, unsigned vp_width, unsigned vp_height,
    video_driver_update_viewport(&gdi->vp, force_full, gdi->keep_aspect, true);
 }
 
+#ifdef HAVE_OVERLAY
+/*
+ * INPUT OVERLAY DRIVER
+ *
+ * Implements video_overlay_interface_t for GDI.  The overlay
+ * subsystem (input/input_overlay.c) hands us BGRA32 RGBA images
+ * via load(), tells us where they go in 0..1 normalised space via
+ * vertex_geom() / tex_geom(), and we draw them on top of the game
+ * frame each frame using AlphaBlend.
+ *
+ * Storage: each loaded overlay is converted to a premultiplied
+ * BGRA DIB section (HBITMAP) at load time so the per-frame draw
+ * is a straight AlphaBlend with no pixel rewriting.  This mirrors
+ * what gdi_load_texture does for menu/widget textures.
+ *
+ * Coordinate conventions (matching d3d8/d3d9):
+ *   - vert_coords[0..3] = (x, y, w, h) in 0..1 normalised space.
+ *     The setter flips y to (1.0f - y) and negates h, the same
+ *     adjustment d3d8 makes for D3D's y-up convention.  We undo
+ *     that flip at render time so the overlay lands the right way
+ *     up in GDI's y-down space.
+ *   - tex_coords[0..3] = (x, y, w, h) in 0..1 texture space.
+ *     This driver doesn't currently sub-rect overlay textures —
+ *     core libretro never seems to use anything other than the
+ *     full image — but the field is preserved so the contract
+ *     matches the other backends in case something does.
+ *   - fullscreen=true: vert_coords span the entire window, including
+ *     the letterbox/pillarbox bars.  This is what regular touch
+ *     overlays use so the buttons keep working when the game is
+ *     letterboxed.
+ *   - fullscreen=false: vert_coords span only the game viewport.
+ */
+static void gdi_overlay_free(gdi_t *gdi)
+{
+   unsigned i;
+   if (!gdi || !gdi->overlays)
+      return;
+   for (i = 0; i < gdi->overlays_size; i++)
+   {
+      if (gdi->overlays[i].bmp)
+         DeleteObject(gdi->overlays[i].bmp);
+   }
+   free(gdi->overlays);
+   gdi->overlays      = NULL;
+   gdi->overlays_size = 0;
+}
+
+static bool gdi_overlay_load(void *data,
+      const void *image_data, unsigned num_images)
+{
+   unsigned i;
+   gdi_t                       *gdi = (gdi_t*)data;
+   const struct texture_image *imgs = (const struct texture_image*)image_data;
+
+   if (!gdi)
+      return false;
+
+   /* Drop any prior overlay set first.  load() is the install
+    * point — input_overlay.c calls it once per overlay activation
+    * with the full image array, never incrementally. */
+   gdi_overlay_free(gdi);
+
+   if (num_images == 0 || !imgs)
+      return true;
+
+   gdi->overlays = (struct gdi_overlay*)calloc(num_images,
+         sizeof(*gdi->overlays));
+   if (!gdi->overlays)
+      return false;
+   gdi->overlays_size = num_images;
+
+   for (i = 0; i < num_images; i++)
+   {
+      BITMAPINFO bmi;
+      void              *bits = NULL;
+      HBITMAP            bmp;
+      const uint32_t    *src;
+      uint32_t          *dst;
+      size_t             j, total;
+      struct gdi_overlay *o = &gdi->overlays[i];
+      unsigned           w  = imgs[i].width;
+      unsigned           h  = imgs[i].height;
+
+      if (w == 0 || h == 0 || !imgs[i].pixels)
+         continue;
+
+      memset(&bmi, 0, sizeof(bmi));
+      bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+      bmi.bmiHeader.biWidth       = (LONG)w;
+      bmi.bmiHeader.biHeight      = -(LONG)h; /* top-down */
+      bmi.bmiHeader.biPlanes      = 1;
+      bmi.bmiHeader.biBitCount    = 32;
+      bmi.bmiHeader.biCompression = BI_RGB;
+
+      bmp = CreateDIBSection(gdi->memDC ? gdi->memDC : NULL,
+            &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+      if (!bmp || !bits)
+      {
+         if (bmp)
+            DeleteObject(bmp);
+         continue;
+      }
+
+      /* Premultiply alpha at load: AlphaBlend with AC_SRC_ALPHA
+       * needs premultiplied RGB or transparent pixels bleed
+       * background colour through their fringes.  Source pixels
+       * are 0xAARRGGBB (BGRA in memory order, the GDI default
+       * when supports_rgba is false). */
+      src   = imgs[i].pixels;
+      dst   = (uint32_t*)bits;
+      total = (size_t)w * (size_t)h;
+      for (j = 0; j < total; j++)
+      {
+         uint32_t s  = src[j];
+         uint8_t  sa = (uint8_t)((s >> 24) & 0xFF);
+         uint8_t  sr = (uint8_t)((s >> 16) & 0xFF);
+         uint8_t  sg = (uint8_t)((s >>  8) & 0xFF);
+         uint8_t  sb = (uint8_t)( s        & 0xFF);
+         uint8_t  pr, pg, pb;
+
+         if (sa == 255)      { pr = sr; pg = sg; pb = sb; }
+         else if (sa == 0)   { pr = pg = pb = 0; }
+         else
+         {
+            pr = (uint8_t)(((unsigned)sr * sa) / 255u);
+            pg = (uint8_t)(((unsigned)sg * sa) / 255u);
+            pb = (uint8_t)(((unsigned)sb * sa) / 255u);
+         }
+         dst[j] = ((uint32_t)sa << 24)
+                | ((uint32_t)pr << 16)
+                | ((uint32_t)pg <<  8)
+                |  (uint32_t)pb;
+      }
+
+      o->bmp           = bmp;
+      o->tex_w         = w;
+      o->tex_h         = h;
+      o->alpha_mod     = 1.0f;
+      o->fullscreen    = false;
+      /* Stretch to the full target rect by default.  The overlay
+       * descriptor drives subsequent vertex_geom calls before
+       * anything is actually drawn. */
+      o->tex_coords[0]  = 0.0f;
+      o->tex_coords[1]  = 0.0f;
+      o->tex_coords[2]  = 1.0f;
+      o->tex_coords[3]  = 1.0f;
+      o->vert_coords[0] = 0.0f;
+      o->vert_coords[1] = 0.0f;
+      o->vert_coords[2] = 1.0f;
+      o->vert_coords[3] = 1.0f;
+   }
+
+   return true;
+}
+
+static void gdi_overlay_tex_geom(void *data, unsigned index,
+      float x, float y, float w, float h)
+{
+   gdi_t *gdi = (gdi_t*)data;
+   if (!gdi || index >= gdi->overlays_size)
+      return;
+   gdi->overlays[index].tex_coords[0] = x;
+   gdi->overlays[index].tex_coords[1] = y;
+   gdi->overlays[index].tex_coords[2] = w;
+   gdi->overlays[index].tex_coords[3] = h;
+}
+
+static void gdi_overlay_vertex_geom(void *data, unsigned index,
+      float x, float y, float w, float h)
+{
+   gdi_t *gdi = (gdi_t*)data;
+   if (!gdi || index >= gdi->overlays_size)
+      return;
+   /* Overlay descriptor coordinates from input_overlay are already
+    * y-down (y=0 top of screen, y=1 bottom — same convention as
+    * RETRO_DEVICE_POINTER which the hit-test path uses) and (x, y)
+    * names the top-left corner of the rect.  GDI's screen space is
+    * also y-down with the same origin, so we store the values
+    * verbatim and the render path does a direct multiply.
+    *
+    * d3d8 / d3d9 / gl all flip y here (y = 1.0f - y; h = -h;)
+    * because their pipelines emit vertices in y-up clip space and
+    * rely on the viewport transform to flip back to screen.  GDI
+    * has no such pipeline — every draw is a pixel-space blit
+    * straight to a DC — so the flip is a bug for us, not a
+    * compatibility shim. */
+   gdi->overlays[index].vert_coords[0] = x;
+   gdi->overlays[index].vert_coords[1] = y;
+   gdi->overlays[index].vert_coords[2] = w;
+   gdi->overlays[index].vert_coords[3] = h;
+}
+
+static void gdi_overlay_enable(void *data, bool state)
+{
+   gdi_t *gdi = (gdi_t*)data;
+   if (!gdi)
+      return;
+   gdi->overlays_enabled = state;
+}
+
+static void gdi_overlay_full_screen(void *data, bool enable)
+{
+   unsigned i;
+   gdi_t *gdi = (gdi_t*)data;
+   if (!gdi || !gdi->overlays)
+      return;
+   for (i = 0; i < gdi->overlays_size; i++)
+      gdi->overlays[i].fullscreen = enable;
+}
+
+static void gdi_overlay_set_alpha(void *data, unsigned index, float mod)
+{
+   gdi_t *gdi = (gdi_t*)data;
+   if (!gdi || index >= gdi->overlays_size)
+      return;
+   gdi->overlays[index].alpha_mod = mod;
+}
+
+/* Composite all enabled overlays onto the currently selected DC.
+ * Caller has already SelectObject'd bmp_menu (or whatever the
+ * active target is) into gdi->memDC.  Each overlay is alpha-
+ * blended on top of whatever's already there.
+ *
+ * Coordinate space:
+ *   - fullscreen overlay → vert_coords span (0,0,W,H) where W,H is
+ *     the window size, so buttons drawn outside the game viewport
+ *     (e.g. on the pillar bars) still hit-test correctly.
+ *   - non-fullscreen overlay → vert_coords span the game viewport
+ *     rect (gdi->vp.x/y, gdi->vp.width/height).
+ *
+ * vert_coords[1] / [3] hold the d3d8-style flipped y / negative
+ * h; we recompute the rect's top-left and absolute size locally
+ * so the math stays straightforward. */
+static void gdi_overlays_render(gdi_t *gdi,
+      unsigned surface_width, unsigned surface_height)
+{
+#if GDI_HAS_ALPHABLEND
+   unsigned i;
+
+   if (!gdi || !gdi->overlays || !gdi->overlays_enabled
+         || !gdi->memDC)
+      return;
+
+   if (!gdi->texDC)
+      gdi->texDC = CreateCompatibleDC(gdi->winDC);
+   if (!gdi->texDC)
+      return;
+
+   for (i = 0; i < gdi->overlays_size; i++)
+   {
+      BLENDFUNCTION blend;
+      HBITMAP            tex_old;
+      struct gdi_overlay *o = &gdi->overlays[i];
+      float vx, vy, vw, vh;
+      int    base_x, base_y;
+      unsigned base_w, base_h;
+      int    dst_x, dst_y;
+      int    dst_w, dst_h;
+      unsigned alpha_byte;
+
+      if (!o->bmp || o->tex_w == 0 || o->tex_h == 0)
+         continue;
+      if (o->alpha_mod <= 0.0f)
+         continue;
+
+      /* Direct mapping from y-down 0..1 normalized space to
+       * y-down screen pixels.  vert_coords[0..3] = (x, y, w, h)
+       * with (x, y) = top-left corner of the rect. */
+      vx = o->vert_coords[0];
+      vy = o->vert_coords[1];
+      vw = o->vert_coords[2];
+      vh = o->vert_coords[3];
+
+      if (o->fullscreen)
+      {
+         base_x = 0;
+         base_y = 0;
+         base_w = surface_width;
+         base_h = surface_height;
+      }
+      else
+      {
+         base_x = gdi->vp.x;
+         base_y = gdi->vp.y;
+         base_w = gdi->vp.width  ? gdi->vp.width  : surface_width;
+         base_h = gdi->vp.height ? gdi->vp.height : surface_height;
+      }
+
+      dst_x = base_x + (int)(vx * (float)base_w + 0.5f);
+      dst_y = base_y + (int)(vy * (float)base_h + 0.5f);
+      dst_w = (int)(vw * (float)base_w + 0.5f);
+      dst_h = (int)(vh * (float)base_h + 0.5f);
+      if (dst_w <= 0 || dst_h <= 0)
+         continue;
+
+      alpha_byte = (unsigned)(o->alpha_mod * 255.0f);
+      if (alpha_byte > 255)
+         alpha_byte = 255;
+
+      /* The overlay's own per-pixel alpha was premultiplied at
+       * load.  alpha_mod is applied as SourceConstantAlpha so the
+       * driver multiplies through the whole image uniformly —
+       * AC_SRC_ALPHA + SourceConstantAlpha together give the
+       * "premultiplied source modulated by a constant" semantics
+       * the input overlay subsystem expects from set_alpha. */
+      blend.BlendOp             = AC_SRC_OVER;
+      blend.BlendFlags          = 0;
+      blend.SourceConstantAlpha = (BYTE)alpha_byte;
+      blend.AlphaFormat         = AC_SRC_ALPHA;
+
+      tex_old = (HBITMAP)SelectObject(gdi->texDC, o->bmp);
+      AlphaBlend(gdi->memDC,
+            dst_x, dst_y, dst_w, dst_h,
+            gdi->texDC,
+            0, 0, o->tex_w, o->tex_h, blend);
+      SelectObject(gdi->texDC, tex_old);
+   }
+#else
+   (void)gdi;
+   (void)surface_width;
+   (void)surface_height;
+#endif
+}
+
+static const video_overlay_interface_t gdi_overlay_interface = {
+   gdi_overlay_enable,
+   gdi_overlay_load,
+   gdi_overlay_tex_geom,
+   gdi_overlay_vertex_geom,
+   gdi_overlay_full_screen,
+   gdi_overlay_set_alpha,
+};
+
+static void gdi_get_overlay_interface(void *data,
+      const video_overlay_interface_t **iface)
+{
+   (void)data;
+   *iface = &gdi_overlay_interface;
+}
+#endif
+
 video_driver_t video_gdi = {
    gdi_init,
    gdi_frame,
@@ -3045,7 +3424,7 @@ video_driver_t video_gdi = {
    NULL, /* read_viewport */
    NULL, /* read_frame_raw */
 #ifdef HAVE_OVERLAY
-   NULL, /* get_overlay_interface */
+   gdi_get_overlay_interface,
 #endif
    gdi_get_poke_interface,
    NULL, /* wrap_type_to_enum */
