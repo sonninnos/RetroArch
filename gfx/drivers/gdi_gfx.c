@@ -341,8 +341,10 @@ static void gdi_menu_surface_clear(gdi_t *gdi, uint8_t r, uint8_t g, uint8_t b)
  * are reasonable (> 4, i.e. not the placeholder).  The 16-bit
  * format detection here mirrors Step 9's logic for the bmp path —
  * RGB565 for the core, RGB555 fallback for Win98 (no
- * BI_BITFIELDS-with-RGB444 support).  We never see RGUI's RGB444
- * frames here because RGUI uses the legacy non-textured path. */
+ * BI_BITFIELDS-with-RGB444 support).  This helper is only ever
+ * called with the *core* frame, not RGUI's menu_frame — RGUI
+ * pixels are RGBA4444 and need an alpha-blend composite, handled
+ * separately in Step 9. */
 static void gdi_upload_core_frame_to_menu(gdi_t *gdi,
       const void *frame_data, unsigned frame_w, unsigned frame_h,
       unsigned frame_pitch, unsigned frame_bits)
@@ -412,6 +414,118 @@ static void gdi_upload_core_frame_to_menu(gdi_t *gdi,
          0, 0, frame_w, frame_h,
          src, (BITMAPINFO*)&info, DIB_RGB_COLORS, SRCCOPY);
 }
+
+#ifdef GDI_HAS_ALPHABLEND
+/* Composite RGUI's RGBA4444 menu_frame onto bmp_menu using
+ * source-over alpha blending.
+ *
+ * RGUI's frame buffer mixes opaque pixels (icons, text, thumbnail
+ * panels) with semi-transparent pixels (the chequer background
+ * when menu_rgui_transparency is enabled — the platform pixel
+ * format function in rgui.c routes gdi to argb32_to_rgba4444,
+ * which returns transparency_supported = true).  StretchDIBits
+ * with SRCCOPY would discard the alpha and overwrite whatever
+ * Step 4b put underneath; this helper preserves it.
+ *
+ * Strategy: convert the 16-bit RGBA4444 source into a 32-bit BGRA
+ * premultiplied scratch DIB section, then AlphaBlend-stretch onto
+ * bmp_menu over the existing pixels.  RGUI's frame is small
+ * (typically 256x192 to 512x480), so the per-pixel conversion is
+ * cheap.  The scratch DIB is allocated per call — caching it on
+ * gdi_t is a possible future optimisation but not necessary for
+ * correctness, and RGUI doesn't repaint every frame at high
+ * resolutions where the cost would matter.
+ *
+ * Falls back to opaque copy on Win95 (no AlphaBlend) — see the
+ * non-GDI_HAS_ALPHABLEND branch below.  Caller must have
+ * bmp_menu selected into gdi->memDC. */
+static void gdi_blit_rgui_alpha(gdi_t *gdi,
+      const void *frame_data, unsigned frame_w, unsigned frame_h,
+      unsigned dst_x, unsigned dst_y,
+      unsigned dst_w, unsigned dst_h)
+{
+   BITMAPINFO       bmi;
+   void            *bgra_pixels = NULL;
+   HBITMAP          scratch_bmp;
+   HBITMAP          scratch_old;
+   BLENDFUNCTION    blend;
+   const uint16_t  *src;
+   uint32_t        *dst;
+   unsigned         x, y;
+
+   if (!gdi || !gdi->memDC || !frame_data || !frame_w || !frame_h)
+      return;
+
+   memset(&bmi, 0, sizeof(bmi));
+   bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+   bmi.bmiHeader.biWidth       = frame_w;
+   bmi.bmiHeader.biHeight      = -(int)frame_h; /* top-down */
+   bmi.bmiHeader.biPlanes      = 1;
+   bmi.bmiHeader.biBitCount    = 32;
+   bmi.bmiHeader.biCompression = BI_RGB;
+
+   scratch_bmp = CreateDIBSection(gdi->memDC, &bmi, DIB_RGB_COLORS,
+         &bgra_pixels, NULL, 0);
+   if (!scratch_bmp || !bgra_pixels)
+   {
+      if (scratch_bmp)
+         DeleteObject(scratch_bmp);
+      return;
+   }
+
+   /* RGBA4444 → BGRA32 premultiplied.  Layout from
+    * argb32_to_rgba4444:
+    *   bits 12-15: R   bits 8-11: G   bits 4-7: B   bits 0-3: A
+    *
+    * Premultiply means each colour channel times alpha / 255.  In
+    * 4-bit-alpha space that's roughly (c4 * a4 * 17) / 255 where
+    * c4 / a4 are 0..15 and 17 expands 4-bit to 8-bit.  We compute
+    * everything at 8-bit precision after the expand. */
+   src = (const uint16_t *)frame_data;
+   dst = (uint32_t *)bgra_pixels;
+   for (y = 0; y < frame_h; y++)
+   {
+      for (x = 0; x < frame_w; x++)
+      {
+         uint16_t p = src[y * frame_w + x];
+         unsigned r = ((p >> 12) & 0x0F) * 17; /* 0..255 */
+         unsigned g = ((p >>  8) & 0x0F) * 17;
+         unsigned b = ((p >>  4) & 0x0F) * 17;
+         unsigned a = ( p        & 0x0F) * 17;
+
+         if (a == 0)
+         {
+            dst[y * frame_w + x] = 0;
+            continue;
+         }
+         if (a < 255)
+         {
+            r = (r * a + 127) / 255;
+            g = (g * a + 127) / 255;
+            b = (b * a + 127) / 255;
+         }
+         dst[y * frame_w + x] = (a << 24) | (r << 16) | (g << 8) | b;
+      }
+   }
+
+   if (!gdi->texDC)
+      gdi->texDC = CreateCompatibleDC(gdi->winDC);
+   scratch_old = (HBITMAP)SelectObject(gdi->texDC, scratch_bmp);
+
+   blend.BlendOp             = AC_SRC_OVER;
+   blend.BlendFlags          = 0;
+   blend.SourceConstantAlpha = 255;
+   blend.AlphaFormat         = AC_SRC_ALPHA;
+
+   AlphaBlend(gdi->memDC,
+         dst_x, dst_y, dst_w, dst_h,
+         gdi->texDC, 0, 0, frame_w, frame_h,
+         blend);
+
+   SelectObject(gdi->texDC, scratch_old);
+   DeleteObject(scratch_bmp);
+}
+#endif /* GDI_HAS_ALPHABLEND */
 
 /*
  * DISPLAY DRIVER
@@ -2395,28 +2509,36 @@ static bool gdi_frame(void *data, const void *frame,
       gdi_menu_surface_clear(gdi, 0, 0, 0);
    }
 
-   /* --- Step 4b: textured-menu-over-running-game underlay.
+   /* --- Step 4b: menu-over-running-game underlay.
     *
-    * When XMB/Ozone/MaterialUI is up and the user has content
-    * loaded, we upload the actual game frame into bmp_menu as a
-    * background BEFORE menu_driver_frame paints the menu on top.
-    * Without this, Ozone's semi-transparent panels composite
-    * against solid black instead of the running game.  d3d9
-    * achieves the same effect implicitly because each draw call
-    * targets the back buffer which already holds the game image;
-    * we have to do it explicitly because bmp_menu was just cleared.
+    * When the menu is up and the user has content loaded, upload
+    * the actual game frame into bmp_menu as a background BEFORE
+    * menu_driver_frame paints the menu on top.  This applies to:
+    *
+    *   - Textured menus (XMB/Ozone/MaterialUI): without this,
+    *     their semi-transparent panels composite against solid
+    *     black instead of the running game.
+    *   - RGUI with transparency: its chequer pattern is
+    *     rendered with partial alpha (when
+    *     menu_rgui_transparency = true and the platform supports
+    *     it, which gdi does — falls through to argb32_to_rgba4444
+    *     in rgui_set_pixel_format_function).  The Step 9 RGUI
+    *     branch composites that against bmp_menu, so the game
+    *     needs to be there as the underlay.
+    *
+    * d3d9 achieves the same effect implicitly because each draw
+    * call targets the back buffer which already holds the game
+    * image; we have to do it explicitly because bmp_menu was
+    * just cleared.
     *
     * Skipped when:
     *   - the menu isn't alive (no underlay needed)
-    *   - the menu is alive but no content is running (frame is the
-    *     4x4 placeholder; we want solid black under the menu)
-    *   - menu_frame is set (RGUI uses the legacy non-textured
-    *     path, never reaches here) */
+    *   - no content is running (frame is the 4x4 placeholder;
+    *     we want solid black under the menu) */
 #ifdef HAVE_MENU
    if (     gdi->menu_textured_active
          && gdi->bmp_menu
          && menu_is_alive
-         && !gdi->menu_frame
          && frame
          && frame_width  > 4
          && frame_height > 4)
@@ -2594,17 +2716,50 @@ static bool gdi_frame(void *data, const void *frame,
 
       if (gdi->menu_textured_active && gdi->bmp_menu)
       {
-         /* bmp_menu is already selected (Step 4) and was cleared
-          * to black, so any pixels outside the viewport rect stay
-          * black — that's the letterbox/pillarbox.  StretchDIBits
-          * goes into the viewport sub-rect; widget / OSD draws
+         /* bmp_menu was cleared in Step 4 (so the surrounding
+          * pillarbox / letterbox bars stay black) and Step 4b
+          * underlayed the running game frame into the viewport
+          * sub-rect when content is loaded.  StretchDIBits goes
+          * into that same viewport sub-rect; widget / OSD draws
           * that follow then land at native resolution on top of
           * the upscaled image (and on top of the bars, which is
-          * fine — widgets are positioned in window space). */
-         StretchDIBits(gdi->memDC,
-               gdi->vp.x, gdi->vp.y, gdi->vp.width, gdi->vp.height,
-               0, 0, width, height,
-               frame_to_copy, (BITMAPINFO*)&info, DIB_RGB_COLORS, SRCCOPY);
+          * fine — widgets are positioned in window space).
+          *
+          * For RGUI specifically, the source format is RGBA4444
+          * with alpha actually meaningful (the chequer pattern
+          * uses partial alpha when menu_rgui_transparency is on,
+          * which is the default for any platform RGUI considers
+          * transparency-capable — gdi falls into the
+          * transparency-supported branch in
+          * rgui_set_pixel_format_function).  We need a real
+          * alpha-blend composite over the underlayed game frame,
+          * not an opaque overwrite.  gdi_blit_rgui_alpha handles
+          * the format conversion + AlphaBlend.
+          *
+          * The opaque StretchDIBits path remains for:
+          *   - non-RGUI menu_frame sources, if any (none today).
+          *   - core game frames going through this branch (the
+          *     Step 4b skip-condition gates: menu_textured_active
+          *     is true, but the source here is the core frame,
+          *     not menu_frame).
+          *   - Win95 fallback where AlphaBlend isn't available;
+          *     transparency degrades to opaque, RGUI's chequer
+          *     becomes solid, which is the same behaviour
+          *     non-transparency-capable backends give. */
+#ifdef GDI_HAS_ALPHABLEND
+         if (frame_to_copy == gdi->menu_frame && bits == 16)
+         {
+            gdi_blit_rgui_alpha(gdi, frame_to_copy, width, height,
+                  gdi->vp.x, gdi->vp.y, gdi->vp.width, gdi->vp.height);
+         }
+         else
+#endif
+         {
+            StretchDIBits(gdi->memDC,
+                  gdi->vp.x, gdi->vp.y, gdi->vp.width, gdi->vp.height,
+                  0, 0, width, height,
+                  frame_to_copy, (BITMAPINFO*)&info, DIB_RGB_COLORS, SRCCOPY);
+         }
       }
       else
       {
