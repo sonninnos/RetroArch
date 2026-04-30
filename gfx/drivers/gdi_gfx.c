@@ -1287,67 +1287,153 @@ static void gfx_display_gdi_draw(gfx_display_ctx_draw_t *draw,
          out    = gdi->scratch_quad_pixels;
          stride = gdi->scratch_quad_w;
 
-         /* Bilinear interpolation: t_x in [0,1] across width,
-          * t_y in [0,1] across height.  Source rows in the colour
-          * array are bottom-up, so y=0 (top of dst) corresponds to
-          * t_y=1 (TL/TR) and y=dst_h-1 (bottom) corresponds to
-          * t_y=0 (BL/BR).  We use 256-fraction integer math (no
-          * float) for tightness; the per-pixel cost here is
-          * 4 multiplies + a shift per channel, plenty fast at the
-          * sizes Ozone uses for gradient strips. */
-         for (iy = 0; iy < dst_h; iy++)
+         /* In practice the menu / widget code almost always draws 1D
+          * gradients: vertical (header strips, drop shadows, sidebar
+          * fades — TL == TR and BL == BR) or horizontal (rare but
+          * exists — TL == BL and TR == BR).  The general 4-corner
+          * bilinear case is the fallback for anything that doesn't
+          * fit those patterns.
+          *
+          * Detection lets us collapse the doubly-nested per-pixel
+          * loop into a single 1D computation plus a fill — for a
+          * 600x80 vertical gradient, that's ~80 pixel computes
+          * instead of ~48000.  At wider resolutions (full-window
+          * widget shadows on a 4K display) the saving scales with
+          * dst_w. */
          {
-            unsigned ty;
-            unsigned t_top, t_bot;
-            uint32_t *row = out + (size_t)iy * stride;
+            bool vertical_only   = (tl == tr) && (bl == br);
+            bool horizontal_only = (tl == bl) && (tr == br);
 
-            /* Top of dst → ty=0 (full TL/TR contribution).  Bottom
-             * of dst → ty=255 (full BL/BR contribution). */
-            ty    = (dst_h <= 1) ? 0 : (iy * 255u) / (dst_h - 1);
-            t_bot = ty;
-            t_top = 255u - ty;
+            /* Solid-colour case (all four corners equal) is caught
+             * by gdi_color_is_gradient() upstream and routed to the
+             * FillRect path before we get here, so we don't need to
+             * special-case it.  But if it ever did slip through
+             * (e.g. uniform alpha fade), both vertical_only and
+             * horizontal_only would be true and we'd just use the
+             * vertical path — still correct. */
 
-            for (ix = 0; ix < dst_w; ix++)
+            if (vertical_only)
             {
-               unsigned tx, t_left, t_right;
-               uint32_t left_r, left_g, left_b, left_a;
-               uint32_t right_r, right_g, right_b, right_a;
-               uint32_t r_, g_, b_, a_;
-
-               tx      = (dst_w <= 1) ? 0 : (ix * 255u) / (dst_w - 1);
-               t_right = tx;
-               t_left  = 255u - tx;
-
-               /* Vertical interp: left edge (TL→BL) and right edge
-                * (TR→BR). */
-               left_r  = (tl_r * t_top + bl_r * t_bot) / 255u;
-               left_g  = (tl_g * t_top + bl_g * t_bot) / 255u;
-               left_b  = (tl_b * t_top + bl_b * t_bot) / 255u;
-               left_a  = (tl_a * t_top + bl_a * t_bot) / 255u;
-               right_r = (tr_r * t_top + br_r * t_bot) / 255u;
-               right_g = (tr_g * t_top + br_g * t_bot) / 255u;
-               right_b = (tr_b * t_top + br_b * t_bot) / 255u;
-               right_a = (tr_a * t_top + br_a * t_bot) / 255u;
-
-               /* Horizontal interp between the two vertical edges. */
-               r_ = (left_r * t_left + right_r * t_right) / 255u;
-               g_ = (left_g * t_left + right_g * t_right) / 255u;
-               b_ = (left_b * t_left + right_b * t_right) / 255u;
-               a_ = (left_a * t_left + right_a * t_right) / 255u;
-
-               /* Pre-multiply RGB by per-pixel alpha for AlphaBlend.
-                * For all-opaque we skip the multiply entirely; the
-                * BitBlt path below ignores alpha anyway. */
-               if (all_opaque)
+               /* TL == TR and BL == BR, so every row is a uniform
+                * colour interpolated between top and bottom.
+                * Compute the row colour once, fill the row.  We use
+                * the BL corner for the bottom contribution and TL
+                * for the top contribution since the L/R sides are
+                * identical by precondition. */
+               for (iy = 0; iy < dst_h; iy++)
                {
-                  row[ix] = (0xFFu << 24) | (r_ << 16) | (g_ << 8) | b_;
+                  uint32_t *row = out + (size_t)iy * stride;
+                  unsigned ty   = (dst_h <= 1) ? 0 : (iy * 255u) / (dst_h - 1);
+                  unsigned t_top = 255u - ty;
+                  unsigned t_bot = ty;
+                  uint32_t r_   = (tl_r * t_top + bl_r * t_bot) / 255u;
+                  uint32_t g_   = (tl_g * t_top + bl_g * t_bot) / 255u;
+                  uint32_t b_   = (tl_b * t_top + bl_b * t_bot) / 255u;
+                  uint32_t a_   = (tl_a * t_top + bl_a * t_bot) / 255u;
+                  uint32_t pix;
+                  if (all_opaque)
+                     pix = (0xFFu << 24) | (r_ << 16) | (g_ << 8) | b_;
+                  else
+                  {
+                     uint32_t pr = (r_ * a_) / 255u;
+                     uint32_t pg = (g_ * a_) / 255u;
+                     uint32_t pb = (b_ * a_) / 255u;
+                     pix = (a_ << 24) | (pr << 16) | (pg << 8) | pb;
+                  }
+                  /* Fill the row.  Inline 32-bit stores are what
+                   * any remotely competent compiler turns this into
+                   * (rep stosd or vectorised); explicit memset_pattern4
+                   * isn't portable C. */
+                  for (ix = 0; ix < dst_w; ix++)
+                     row[ix] = pix;
                }
-               else
+            }
+            else if (horizontal_only)
+            {
+               /* TL == BL and TR == BR — every column is uniform.
+                * Compute the first row pixel-by-pixel, then memcpy
+                * it to every subsequent row. */
+               uint32_t *first_row = out;
+               for (ix = 0; ix < dst_w; ix++)
                {
-                  uint32_t pr = (r_ * a_) / 255u;
-                  uint32_t pg = (g_ * a_) / 255u;
-                  uint32_t pb = (b_ * a_) / 255u;
-                  row[ix] = (a_ << 24) | (pr << 16) | (pg << 8) | pb;
+                  unsigned tx      = (dst_w <= 1) ? 0 : (ix * 255u) / (dst_w - 1);
+                  unsigned t_left  = 255u - tx;
+                  unsigned t_right = tx;
+                  uint32_t r_      = (tl_r * t_left + tr_r * t_right) / 255u;
+                  uint32_t g_      = (tl_g * t_left + tr_g * t_right) / 255u;
+                  uint32_t b_      = (tl_b * t_left + tr_b * t_right) / 255u;
+                  uint32_t a_      = (tl_a * t_left + tr_a * t_right) / 255u;
+                  if (all_opaque)
+                     first_row[ix] = (0xFFu << 24) | (r_ << 16) | (g_ << 8) | b_;
+                  else
+                  {
+                     uint32_t pr = (r_ * a_) / 255u;
+                     uint32_t pg = (g_ * a_) / 255u;
+                     uint32_t pb = (b_ * a_) / 255u;
+                     first_row[ix] = (a_ << 24) | (pr << 16) | (pg << 8) | pb;
+                  }
+               }
+               for (iy = 1; iy < dst_h; iy++)
+                  memcpy(out + (size_t)iy * stride, first_row,
+                        (size_t)dst_w * sizeof(uint32_t));
+            }
+            else
+            {
+               /* General 4-corner bilinear.  Bilinear interpolation:
+                * t_x in [0,1] across width, t_y in [0,1] across
+                * height.  Source rows in the colour array are
+                * bottom-up, so y=0 (top of dst) corresponds to
+                * t_y=1 (TL/TR) and y=dst_h-1 (bottom) corresponds
+                * to t_y=0 (BL/BR). */
+               for (iy = 0; iy < dst_h; iy++)
+               {
+                  unsigned ty;
+                  unsigned t_top, t_bot;
+                  uint32_t *row = out + (size_t)iy * stride;
+
+                  ty    = (dst_h <= 1) ? 0 : (iy * 255u) / (dst_h - 1);
+                  t_bot = ty;
+                  t_top = 255u - ty;
+
+                  for (ix = 0; ix < dst_w; ix++)
+                  {
+                     unsigned tx, t_left, t_right;
+                     uint32_t left_r, left_g, left_b, left_a;
+                     uint32_t right_r, right_g, right_b, right_a;
+                     uint32_t r_, g_, b_, a_;
+
+                     tx      = (dst_w <= 1) ? 0 : (ix * 255u) / (dst_w - 1);
+                     t_right = tx;
+                     t_left  = 255u - tx;
+
+                     /* Vertical interp: left edge (TL→BL) and right
+                      * edge (TR→BR). */
+                     left_r  = (tl_r * t_top + bl_r * t_bot) / 255u;
+                     left_g  = (tl_g * t_top + bl_g * t_bot) / 255u;
+                     left_b  = (tl_b * t_top + bl_b * t_bot) / 255u;
+                     left_a  = (tl_a * t_top + bl_a * t_bot) / 255u;
+                     right_r = (tr_r * t_top + br_r * t_bot) / 255u;
+                     right_g = (tr_g * t_top + br_g * t_bot) / 255u;
+                     right_b = (tr_b * t_top + br_b * t_bot) / 255u;
+                     right_a = (tr_a * t_top + br_a * t_bot) / 255u;
+
+                     /* Horizontal interp between the two vertical
+                      * edges. */
+                     r_ = (left_r * t_left + right_r * t_right) / 255u;
+                     g_ = (left_g * t_left + right_g * t_right) / 255u;
+                     b_ = (left_b * t_left + right_b * t_right) / 255u;
+                     a_ = (left_a * t_left + right_a * t_right) / 255u;
+
+                     if (all_opaque)
+                        row[ix] = (0xFFu << 24) | (r_ << 16) | (g_ << 8) | b_;
+                     else
+                     {
+                        uint32_t pr = (r_ * a_) / 255u;
+                        uint32_t pg = (g_ * a_) / 255u;
+                        uint32_t pb = (b_ * a_) / 255u;
+                        row[ix] = (a_ << 24) | (pr << 16) | (pg << 8) | pb;
+                     }
+                  }
                }
             }
          }
