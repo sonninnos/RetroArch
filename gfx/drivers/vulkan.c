@@ -298,9 +298,25 @@ typedef struct vk
 
    struct
    {
-      VkPipeline pipelines[9 * 2];
+      /* Layout: every menu draw in the codebase uses
+       * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so this driver only keeps
+       * STRIP variants:
+       *   [0] alpha_blend, no blend
+       *   [1] alpha_blend, blend
+       *   [2] ribbon
+       *   [3] ribbon_simple
+       *   [4] snow_simple
+       *   [5] snow
+       *   [6] bokeh
+       *   [7] snowflake
+       * All entries are TRIANGLE_STRIP topology.  The history of
+       * this array previously included parallel TRIANGLE_LIST
+       * variants in even slots, but no caller ever set prim_type to
+       * anything other than TRIANGLESTRIP, so the LIST pipelines
+       * were built and never used. */
+      VkPipeline pipelines[8];
 #ifdef VULKAN_HDR_SWAPCHAIN
-      VkPipeline pipelines_sdr[9 * 2]; /* SDR offscreen variants */
+      VkPipeline pipelines_sdr[8]; /* SDR offscreen variants, same layout */
 #endif
       struct vk_texture blank_texture;
    } display;
@@ -1774,23 +1790,27 @@ static const float *gfx_display_vk_get_default_tex_coords(void)
 }
 
 #ifdef HAVE_SHADERPIPELINE
-static unsigned to_menu_pipeline(
-      enum gfx_display_prim_type type, unsigned pipeline)
+static unsigned to_menu_pipeline(unsigned pipeline)
 {
+   /* The display pipeline array slots [2..7] hold the six menu
+    * shader pipelines (ribbon, ribbon_simple, snow_simple, snow,
+    * bokeh, snowflake) in that order.  VIDEO_SHADER_MENU through
+    * VIDEO_SHADER_MENU_6 are consecutive descending #defines, so
+    * the mapping is a simple offset. */
    switch (pipeline)
    {
       case VIDEO_SHADER_MENU:
-         return 6 + (type == GFX_DISPLAY_PRIM_TRIANGLESTRIP);
+         return 2;
       case VIDEO_SHADER_MENU_2:
-         return 8 + (type == GFX_DISPLAY_PRIM_TRIANGLESTRIP);
+         return 3;
       case VIDEO_SHADER_MENU_3:
-         return 10 + (type == GFX_DISPLAY_PRIM_TRIANGLESTRIP);
+         return 4;
       case VIDEO_SHADER_MENU_4:
-         return 12 + (type == GFX_DISPLAY_PRIM_TRIANGLESTRIP);
+         return 5;
       case VIDEO_SHADER_MENU_5:
-         return 14 + (type == GFX_DISPLAY_PRIM_TRIANGLESTRIP);
+         return 6;
       case VIDEO_SHADER_MENU_6:
-         return 16 + (type == GFX_DISPLAY_PRIM_TRIANGLESTRIP);
+         return 7;
       default:
          break;
    }
@@ -1987,7 +2007,7 @@ static void gfx_display_vk_draw(gfx_display_ctx_draw_t *draw,
       case VIDEO_SHADER_MENU_6:
          {
             struct vk_draw_triangles call;
-            unsigned idx = to_menu_pipeline(draw->prim_type, draw->pipeline_id);
+            unsigned idx = to_menu_pipeline(draw->pipeline_id);
 
 #ifdef VULKAN_HDR_SWAPCHAIN
             call.pipeline     = (vk->flags & VK_FLAG_SDR_PIPELINE)
@@ -2012,10 +2032,11 @@ static void gfx_display_vk_draw(gfx_display_ctx_draw_t *draw,
       default:
          {
             struct vk_draw_triangles call;
+            /* Slot 0 = no blend, slot 1 = blend.  Both are TRIANGLE_STRIP
+             * (every menu draw is a tristrip; see the comment on
+             * display.pipelines for the layout). */
             unsigned
-               disp_pipeline  =
-                 ((draw->prim_type == GFX_DISPLAY_PRIM_TRIANGLESTRIP) << 1)
-               | (((vk->flags & VK_FLAG_DISPLAY_BLEND) > 0) << 0);
+               disp_pipeline  = ((vk->flags & VK_FLAG_DISPLAY_BLEND) > 0);
 #ifdef VULKAN_HDR_SWAPCHAIN
             call.pipeline     = (vk->flags & VK_FLAG_SDR_PIPELINE)
                ? vk->display.pipelines_sdr[disp_pipeline]
@@ -3499,13 +3520,12 @@ static void vulkan_init_pipelines(vk_t *vk)
    vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
          1, &pipe, NULL, &vk->pipelines.alpha_blend);
 
-   /* Build display pipelines. */
-   for (i = 0; i < 4; i++)
+   /* Build display pipelines (STRIP topology only).
+    *   [0]: blend off, [1]: blend on. */
+   input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+   for (i = 0; i < 2; i++)
    {
-      input_assembly.topology = i & 2 ?
-         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP :
-         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-      blend_attachment.blendEnable = i & 1;
+      blend_attachment.blendEnable = i;
       vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
             1, &pipe, NULL, &vk->display.pipelines[i]);
    }
@@ -3533,13 +3553,16 @@ static void vulkan_init_pipelines(vk_t *vk)
       vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
             1, &pipe, NULL, &vk->pipelines.hdr);
 
-      /* Build display hdr pipelines. */
-      for (i = 4; i < 6; i++)
-      {
-         input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-         vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
-               1, &pipe, NULL, &vk->display.pipelines[i]);
-      }
+      /* The previous code built two additional display pipelines
+       * here (in old slots 4 and 5) using the hdr_frag shader.  Both
+       * iterations of that loop produced identical pipeline objects
+       * (no varying state between them), and no consumer ever
+       * indexed slots 4 or 5 -- they were copy-paste residue from
+       * the SDR-side loop above and went unused even with HDR
+       * enabled.  The dedicated `vk->pipelines.hdr` field built
+       * just above is the actual HDR composition pipeline; it is
+       * still used by vulkan_run_hdr_pipeline at the swapchain
+       * presentation path. */
 
       vkDestroyShaderModule(vk->context->device, shader_stages[1].module, NULL);
 
@@ -3572,10 +3595,13 @@ static void vulkan_init_pipelines(vk_t *vk)
     * readback_render_pass. */
    pipe.renderPass = vk->render_pass;
 
-   /* Other menu pipelines. */
-   for (i = 0; i < (int)ARRAY_SIZE(vk->display.pipelines) - 6; i++)
+   /* Other menu pipelines.  Six STRIP-only variants populate
+    * slots [2..7]: ribbon, ribbon_simple, snow_simple, snow,
+    * bokeh, snowflake.  See display.pipelines for layout. */
+   input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+   for (i = 0; i < 6; i++)
    {
-      switch (i >> 1)
+      switch (i)
       {
          case 0:
             module_info.codeSize   = sizeof(pipeline_ribbon_vert);
@@ -3587,27 +3613,9 @@ static void vulkan_init_pipelines(vk_t *vk)
             module_info.pCode      = pipeline_ribbon_simple_vert;
             break;
 
-         case 2:
-            module_info.codeSize   = sizeof(alpha_blend_vert);
-            module_info.pCode      = alpha_blend_vert;
-            break;
-
-         case 3:
-            module_info.codeSize   = sizeof(alpha_blend_vert);
-            module_info.pCode      = alpha_blend_vert;
-            break;
-
-         case 4:
-            module_info.codeSize   = sizeof(alpha_blend_vert);
-            module_info.pCode      = alpha_blend_vert;
-            break;
-
-         case 5:
-            module_info.codeSize   = sizeof(alpha_blend_vert);
-            module_info.pCode      = alpha_blend_vert;
-            break;
-
          default:
+            module_info.codeSize   = sizeof(alpha_blend_vert);
+            module_info.pCode      = alpha_blend_vert;
             break;
       }
 
@@ -3616,7 +3624,7 @@ static void vulkan_init_pipelines(vk_t *vk)
       vkCreateShaderModule(vk->context->device,
             &module_info, NULL, &shader_stages[0].module);
 
-      switch (i >> 1)
+      switch (i)
       {
          case 0:
             module_info.codeSize   = sizeof(pipeline_ribbon_frag);
@@ -3657,7 +3665,7 @@ static void vulkan_init_pipelines(vk_t *vk)
       vkCreateShaderModule(vk->context->device,
             &module_info, NULL, &shader_stages[1].module);
 
-      switch (i >> 1)
+      switch (i)
       {
          case 0:
          case 1:
@@ -3670,12 +3678,8 @@ static void vulkan_init_pipelines(vk_t *vk)
             break;
       }
 
-      input_assembly.topology = i & 1 ?
-         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP :
-         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
       vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
-            1, &pipe, NULL, &vk->display.pipelines[6 + i]);
+            1, &pipe, NULL, &vk->display.pipelines[2 + i]);
 
       vkDestroyShaderModule(vk->context->device, shader_stages[0].module, NULL);
       vkDestroyShaderModule(vk->context->device, shader_stages[1].module, NULL);
@@ -3731,16 +3735,15 @@ static void vulkan_init_pipelines(vk_t *vk)
       vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
             1, &pipe, NULL, &vk->pipelines.alpha_blend_sdr);
 
-      /* SDR display pipelines 0-3.
+      /* SDR display pipelines, slots [0..1].  STRIP-only, see the
+       * matching comment on the main display.pipelines build above.
        * Reuse the alpha_blend vertex shader (stages[0]) and
        * alpha_blend fragment shader (stages[1]) still alive
        * from just above. */
-      for (i = 0; i < 4; i++)
+      input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+      for (i = 0; i < 2; i++)
       {
-         input_assembly.topology = i & 2 ?
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP :
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-         blend_attachment.blendEnable = i & 1;
+         blend_attachment.blendEnable = i;
          vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
                1, &pipe, NULL, &vk->display.pipelines_sdr[i]);
       }
@@ -3749,10 +3752,12 @@ static void vulkan_init_pipelines(vk_t *vk)
       vkDestroyShaderModule(vk->context->device, shader_stages[0].module, NULL);
       vkDestroyShaderModule(vk->context->device, shader_stages[1].module, NULL);
 
-      /* SDR menu shader pipelines 6+ */
-      for (i = 0; i < (int)ARRAY_SIZE(vk->display.pipelines) - 6; i++)
+      /* SDR menu shader pipelines, slots [2..7].  STRIP-only;
+       * mirror of the main display.pipelines build. */
+      input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+      for (i = 0; i < 6; i++)
       {
-         switch (i >> 1)
+         switch (i)
          {
             case 0:
                module_info.codeSize = sizeof(pipeline_ribbon_vert);
@@ -3772,7 +3777,7 @@ static void vulkan_init_pipelines(vk_t *vk)
          vkCreateShaderModule(vk->context->device,
                &module_info, NULL, &shader_stages[0].module);
 
-         switch (i >> 1)
+         switch (i)
          {
             case 0:
                module_info.codeSize = sizeof(pipeline_ribbon_frag);
@@ -3806,7 +3811,7 @@ static void vulkan_init_pipelines(vk_t *vk)
          vkCreateShaderModule(vk->context->device,
                &module_info, NULL, &shader_stages[1].module);
 
-         switch (i >> 1)
+         switch (i)
          {
             case 0:
             case 1:
@@ -3819,12 +3824,8 @@ static void vulkan_init_pipelines(vk_t *vk)
                break;
          }
 
-         input_assembly.topology = i & 1 ?
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP :
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
          vkCreateGraphicsPipelines(vk->context->device, vk->pipelines.cache,
-               1, &pipe, NULL, &vk->display.pipelines_sdr[6 + i]);
+               1, &pipe, NULL, &vk->display.pipelines_sdr[2 + i]);
 
          vkDestroyShaderModule(vk->context->device, shader_stages[0].module, NULL);
          vkDestroyShaderModule(vk->context->device, shader_stages[1].module, NULL);
@@ -8149,12 +8150,14 @@ static void vulkan_render_overlay(vk_t *vk, unsigned width,
          {
             int idx                = base + i;
             struct vk_texture *tex = &vk->overlay.images[idx];
+            /* Slot [1] is alpha-blend, TRIANGLE_STRIP (the only
+             * topology this driver builds; see display.pipelines). */
 #ifdef VULKAN_HDR_SWAPCHAIN
             VkPipeline pipeline    = (vk->flags & VK_FLAG_SDR_PIPELINE)
-               ? vk->display.pipelines_sdr[3]
-               : vk->display.pipelines[3]; /* Strip with blend */
+               ? vk->display.pipelines_sdr[1]
+               : vk->display.pipelines[1];
 #else
-            VkPipeline pipeline    = vk->display.pipelines[3]; /* Strip with blend */
+            VkPipeline pipeline    = vk->display.pipelines[1];
 #endif
 
             if (tex->image)
