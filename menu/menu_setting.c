@@ -5929,7 +5929,6 @@ static int setting_action_left_input_mouse_index(
 static int setting_uint_action_left_custom_vp_width(
       rarch_setting_t *setting, size_t idx, bool wraparound)
 {
-   video_viewport_t vp;
    video_driver_state_t *video_st       = video_state_get_ptr();
    struct retro_system_av_info *av_info = &video_st->av_info;
    settings_t                 *settings = config_get_ptr();
@@ -5937,8 +5936,6 @@ static int setting_uint_action_left_custom_vp_width(
 
    if (!settings || !av_info)
       return -1;
-
-   video_driver_get_viewport_info(&vp);
 
    if (custom->width <= setting->min)
       custom->width = setting->min;
@@ -5976,7 +5973,6 @@ static int setting_uint_action_left_custom_vp_width(
 static int setting_uint_action_left_custom_vp_height(
       rarch_setting_t *setting, size_t idx, bool wraparound)
 {
-   video_viewport_t vp;
    video_driver_state_t *video_st       = video_state_get_ptr();
    struct retro_system_av_info *av_info = &video_st->av_info;
    settings_t                 *settings = config_get_ptr();
@@ -5984,8 +5980,6 @@ static int setting_uint_action_left_custom_vp_height(
 
    if (!settings || !av_info)
       return -1;
-
-   video_driver_get_viewport_info(&vp);
 
    if (custom->height <= setting->min)
       custom->height = setting->min;
@@ -6278,7 +6272,6 @@ static int setting_uint_action_right_crt_switch_resolution_super(
 static int setting_uint_action_right_custom_vp_width(
       rarch_setting_t *setting, size_t idx, bool wraparound)
 {
-   video_viewport_t vp;
    settings_t                 *settings = config_get_ptr();
    video_driver_state_t *video_st       = video_state_get_ptr();
    struct retro_system_av_info *av_info = &video_st->av_info;
@@ -6286,8 +6279,6 @@ static int setting_uint_action_right_custom_vp_width(
 
    if (!settings || !av_info)
       return -1;
-
-   video_driver_get_viewport_info(&vp);
 
    if (custom->width >= setting->max)
       custom->width = setting->max;
@@ -6313,7 +6304,6 @@ static int setting_uint_action_right_custom_vp_width(
 static int setting_uint_action_right_custom_vp_height(
       rarch_setting_t *setting, size_t idx, bool wraparound)
 {
-   video_viewport_t vp;
    video_driver_state_t *video_st       = video_state_get_ptr();
    struct retro_system_av_info *av_info = &video_st->av_info;
    settings_t                 *settings = config_get_ptr();
@@ -6321,8 +6311,6 @@ static int setting_uint_action_right_custom_vp_height(
 
    if (!av_info)
       return -1;
-
-   video_driver_get_viewport_info(&vp);
 
    if (custom->height >= setting->max)
       custom->height = setting->max;
@@ -8541,12 +8529,9 @@ static void general_write_handler(rarch_setting_t *setting)
 #endif
       case MENU_ENUM_LABEL_VIDEO_SCALE_INTEGER:
          {
-            video_viewport_t vp;
             video_driver_state_t *video_st       = video_state_get_ptr();
             struct retro_system_av_info *av_info = &video_st->av_info;
             struct video_viewport *custom_vp     = &settings->video_vp_custom;
-
-            video_driver_get_viewport_info(&vp);
 
             if (*setting->value.target.boolean)
             {
@@ -8885,7 +8870,6 @@ static void general_write_handler(rarch_setting_t *setting)
          break;
       case MENU_ENUM_LABEL_VIDEO_ROTATION:
          {
-            video_viewport_t vp;
             rarch_system_info_t *sys_info        = &runloop_state_get_ptr()->system;
             video_driver_state_t *video_st       = video_state_get_ptr();
             struct retro_system_av_info *av_info = &video_st->av_info;
@@ -8903,7 +8887,6 @@ static void general_write_handler(rarch_setting_t *setting)
                       sys_info->rotation) % 4);
 
                /* Update Custom Aspect Ratio values */
-               video_driver_get_viewport_info(&vp);
                custom_vp->x         = 0;
                custom_vp->y         = 0;
 
