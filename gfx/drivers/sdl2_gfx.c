@@ -22,6 +22,7 @@
 #include <retro_inline.h>
 #include <gfx/scaler/scaler.h>
 #include <formats/image.h>
+#include <string/stdstring.h>
 
 #ifdef HAVE_CONFIG_H
 #include "../../config.h"
@@ -341,6 +342,31 @@ static void *sdl2_gfx_init(const video_info_t *video,
    vid = (sdl2_video_t*)calloc(1, sizeof(*vid));
    if (!vid)
       return NULL;
+
+#if defined(_WIN32) && !defined(_XBOX) && !defined(__WINRT__)
+   /* SDL2 internally uses RegisterRawInputDevices and drains the raw
+    * input buffer via GetRawInputBuffer() to feed its own keyboard /
+    * mouse APIs.  This consumes the WM_INPUT stream that the winraw
+    * input driver's hidden HWND_MESSAGE window depends on, so its
+    * keyboard / mouse polling stops receiving events.
+    *
+    * Unlike the d3d8 / d3d9 / d3d11 / d3d12 drivers - which create
+    * their main window with a winraw-aware WndProc
+    * (wnd_proc_d3d_winraw, see gfx/common/win32_common.c) - the SDL2
+    * window's WndProc is owned by SDL and we cannot replace it.
+    *
+    * Warn loudly so users hitting silent broken-input understand
+    * what to change instead of assuming the driver is broken. */
+   if (string_is_equal(settings->arrays.input_driver, "raw"))
+   {
+      RARCH_WARN("[SDL2] The 'raw' (winraw) input driver is "
+            "incompatible with the SDL2 video driver - SDL2 consumes "
+            "Windows raw input internally.\n");
+      RARCH_WARN("[SDL2] Mouse and keyboard input will not work.  "
+            "Switch the input driver to 'dinput' under "
+            "Settings -> Drivers -> Input.\n");
+   }
+#endif
 
    RARCH_LOG("[SDL2] Available renderers (change with $SDL_RENDER_DRIVER):\n");
    for (i = 0; i < SDL_GetNumRenderDrivers(); ++i)
