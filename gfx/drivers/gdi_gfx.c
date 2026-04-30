@@ -2612,11 +2612,21 @@ static bool gdi_frame(void *data, const void *frame,
    unsigned surface_width;
    unsigned surface_height;
 
-   /* GDI does not implement these effects.  XMB still calls into the
-    * shader-pipeline draw path, so we force-disable the bits that
-    * would route through it; this is preserved verbatim from the
-    * legacy driver. */
-   video_info->xmb_shadows_enable   = false;
+   /* GDI has no programmable shader pipeline, so the animated XMB
+    * backgrounds (Ribbon / Snow / Bokeh / etc.) can't run — force
+    * that off so XMB falls back to the static gradient.
+    *
+    * xmb_shadows_enable, on the other hand, is just "draw the icon
+    * and text once at +offset with a black tint, then once more on
+    * top".  The texture-modulated slow path in
+    * gdi_blit_texture_modulated and the tinted-glyph path in
+    * gdi_font_render_line both handle that correctly: pixels land
+    * as premultiplied black with the shadow alpha, AlphaBlend with
+    * AC_SRC_OVER + AC_SRC_ALPHA composites them as expected.  So
+    * this flag is honoured rather than clobbered.  (The legacy GDI
+    * driver predated those paths and force-disabled both flags
+    * together; gl1 still does the same thing for the same legacy
+    * reason.) */
    video_info->menu_shader_pipeline = 0;
 
    if (!frame || !frame_width || !frame_height)
