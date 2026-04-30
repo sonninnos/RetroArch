@@ -142,18 +142,29 @@ static void sdl2_init_font(sdl2_video_t *vid, const char *font_path,
 
 static void sdl2_render_msg(sdl2_video_t *vid, const char *msg)
 {
-   int delta_x          = 0;
-   int delta_y          = 0;
-   unsigned      width  = vid->vp.width;
-   unsigned      height = vid->vp.height;
-   settings_t *settings = config_get_ptr();
-   float msg_pos_x      = settings->floats.video_msg_pos_x;
-   float msg_pos_y      = settings->floats.video_msg_pos_y;
-   int x                = msg_pos_x * width;
-   int y                = (1.0f - msg_pos_y) * height;
+   int delta_x, delta_y, x, y;
+   unsigned width, height;
+   settings_t *settings;
+   float msg_pos_x, msg_pos_y;
 
-   if (!vid->font_data)
+   /* Legacy bitmap OSD font path.  Used as a fallback for the
+    * yellow-text OSD output when widgets are disabled, and as the
+    * set_osd_msg fallback when the supplied font_data isn't a
+    * sdl2_raster_font.  Anything else (menu / widget text, OSD
+    * with widgets enabled) goes through the proper render_msg
+    * dispatch in sdl2_poke_set_osd_msg. */
+   if (!msg || !*msg || !vid->font_data || !vid->font.tex)
       return;
+
+   delta_x   = 0;
+   delta_y   = 0;
+   width     = vid->vp.width;
+   height    = vid->vp.height;
+   settings  = config_get_ptr();
+   msg_pos_x = settings->floats.video_msg_pos_x;
+   msg_pos_y = settings->floats.video_msg_pos_y;
+   x         = (int)(msg_pos_x * width);
+   y         = (int)((1.0f - msg_pos_y) * height);
 
    SDL_SetTextureColorMod(vid->font.tex,
          vid->font_r, vid->font_g, vid->font_b);
@@ -161,7 +172,6 @@ static void sdl2_render_msg(sdl2_video_t *vid, const char *msg)
    for (; *msg; msg++)
    {
       SDL_Rect src_rect, dst_rect;
-      int off_x, off_y, tex_x, tex_y;
       const struct font_glyph *gly =
          vid->font_driver->get_glyph(vid->font_data, (uint8_t)*msg);
 
@@ -171,23 +181,17 @@ static void sdl2_render_msg(sdl2_video_t *vid, const char *msg)
       if (!gly)
          continue;
 
-      off_x      = gly->draw_offset_x;
-      off_y      = gly->draw_offset_y;
-      tex_x      = gly->atlas_offset_x;
-      tex_y      = gly->atlas_offset_y;
-
-      src_rect.x = tex_x;
-      src_rect.y = tex_y;
+      src_rect.x = gly->atlas_offset_x;
+      src_rect.y = gly->atlas_offset_y;
       src_rect.w = (int)gly->width;
       src_rect.h = (int)gly->height;
 
-      dst_rect.x = x + delta_x + off_x;
-      dst_rect.y = y + delta_y + off_y;
+      dst_rect.x = x + delta_x + gly->draw_offset_x;
+      dst_rect.y = y + delta_y + gly->draw_offset_y;
       dst_rect.w = (int)gly->width;
       dst_rect.h = (int)gly->height;
 
-      SDL_RenderCopyEx(vid->renderer, vid->font.tex,
-            &src_rect, &dst_rect, 0, NULL, SDL_FLIP_NONE);
+      SDL_RenderCopy(vid->renderer, vid->font.tex, &src_rect, &dst_rect);
 
       delta_x += gly->advance_x;
       delta_y -= gly->advance_y;
