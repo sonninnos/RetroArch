@@ -651,23 +651,6 @@ static void gfx_display_gl3_draw_pipeline(
 #endif
 }
 
-static GLenum gfx_display_prim_to_gl3_enum(
-      enum gfx_display_prim_type type)
-{
-   switch (type)
-   {
-      case GFX_DISPLAY_PRIM_TRIANGLESTRIP:
-         return GL_TRIANGLE_STRIP;
-      case GFX_DISPLAY_PRIM_TRIANGLES:
-         return GL_TRIANGLES;
-      case GFX_DISPLAY_PRIM_NONE:
-      default:
-         break;
-   }
-
-   return 0;
-}
-
 static void gfx_display_gl3_draw(gfx_display_ctx_draw_t *draw,
       void *data, unsigned video_width, unsigned video_height)
 {
@@ -695,8 +678,12 @@ static void gfx_display_gl3_draw(gfx_display_ctx_draw_t *draw,
             draw->matrix_data ? (math_matrix_4x4*)draw->matrix_data
          : (math_matrix_4x4*)&gl->mvp_no_rot);
 
-      glDrawArrays(gfx_display_prim_to_gl3_enum(
-               draw->prim_type), 0, draw->coords->vertices);
+      /* Every caller in the codebase sets draw->prim_type to
+       * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call switch on
+       * the primitive type that used to live here was dead.
+       * Hard-code GL_TRIANGLE_STRIP; if a future caller passes
+       * TRIANGLES this will need to grow back into a switch. */
+      glDrawArrays(GL_TRIANGLE_STRIP, 0, draw->coords->vertices);
    }
 #ifdef HAVE_SLANG
    else
@@ -797,18 +784,9 @@ static void gfx_display_gl3_draw(gfx_display_ctx_draw_t *draw,
       glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE,
             4 * sizeof(float), (void *)(uintptr_t)0);
 
-      switch (draw->prim_type)
-      {
-         case GFX_DISPLAY_PRIM_TRIANGLESTRIP:
-            glDrawArrays(GL_TRIANGLE_STRIP, 0, draw->coords->vertices);
-            break;
-         case GFX_DISPLAY_PRIM_TRIANGLES:
-            glDrawArrays(GL_TRIANGLES, 0, draw->coords->vertices);
-            break;
-         case GFX_DISPLAY_PRIM_NONE:
-         default:
-            break;
-      }
+      /* See the matching comment in the chain.active branch above:
+       * every caller passes TRIANGLESTRIP. */
+      glDrawArrays(GL_TRIANGLE_STRIP, 0, draw->coords->vertices);
 
       glDisableVertexAttribArray(0);
       glDisableVertexAttribArray(1);

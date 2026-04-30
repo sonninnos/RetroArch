@@ -273,23 +273,6 @@ static void *gfx_display_gl1_get_default_mvp(void *data)
    return &gl1->mvp_no_rot;
 }
 
-static GLenum gfx_display_prim_to_gl1_enum(
-      enum gfx_display_prim_type type)
-{
-   switch (type)
-   {
-      case GFX_DISPLAY_PRIM_TRIANGLESTRIP:
-         return GL_TRIANGLE_STRIP;
-      case GFX_DISPLAY_PRIM_TRIANGLES:
-         return GL_TRIANGLES;
-      case GFX_DISPLAY_PRIM_NONE:
-      default:
-         break;
-   }
-
-   return 0;
-}
-
 static void gfx_display_gl1_blend_begin(void *data)
 {
    glEnable(GL_BLEND);
@@ -366,8 +349,12 @@ static void gfx_display_gl1_draw(gfx_display_ctx_draw_t *draw,
    glColorPointer(4, GL_FLOAT, 0, draw->coords->color);
    glTexCoordPointer(2, GL_FLOAT, 0, draw->coords->tex_coord);
 
-   glDrawArrays(gfx_display_prim_to_gl1_enum(
-            draw->prim_type), 0, draw->coords->vertices);
+   /* Every caller in the codebase sets draw->prim_type to
+    * GFX_DISPLAY_PRIM_TRIANGLESTRIP, so the per-call switch on the
+    * primitive type that used to live here was dead.  Hard-code
+    * GL_TRIANGLE_STRIP; if a future caller passes TRIANGLES this
+    * will need to grow back into a switch. */
+   glDrawArrays(GL_TRIANGLE_STRIP, 0, draw->coords->vertices);
 
    glDisableClientState(GL_COLOR_ARRAY);
    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
