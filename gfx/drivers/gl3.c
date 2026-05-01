@@ -2142,12 +2142,14 @@ static enum rarch_shader_type gl3_get_fallback_shader_type(enum rarch_shader_typ
    flags.flags     = 0;
    video_context_driver_get_flags(&flags);
 
-   /* gl3 (glcore video driver) only ever advertises slang via spirv-cross.
-    * Cg requires the legacy fixed-function / ARB asm pipeline that Core
-    * Profile contexts don't expose, and no context driver advertises
-    * GFX_CTX_FLAGS_SHADERS_CG when the active video driver is "glcore"
-    * (see e.g. x_ctx.c, wgl_ctx.c).  Treat any incoming RARCH_SHADER_CG
-    * the same as an unknown type and fall back to slang. */
+   /* No context driver advertises GFX_CTX_FLAGS_SHADERS_CG for the
+    * "glcore" video driver -- audited x_ctx.c, wgl_ctx.c, drm_ctx.c,
+    * wayland_ctx.c, etc.  Cg requires the legacy fixed-function / ARB
+    * asm pipeline that Core Profile contexts don't expose, so no
+    * RARCH_SHADER_CG path is wired up here.  GLSL and slang are both
+    * Core Profile-compatible and remain valid; in practice context
+    * drivers advertise SLANG for glcore but the GLSL fallback is kept
+    * for builds without slang/spirv-cross. */
    if (type != RARCH_SHADER_GLSL && type != RARCH_SHADER_SLANG)
    {
       type = GL3_DEFAULT_SHADER_TYPE;
