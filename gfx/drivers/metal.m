@@ -326,8 +326,7 @@ typedef NS_ENUM(NSInteger, ViewDrawState)
 
 #pragma mark - Driver Classes
 
-@interface MetalView : MTKView
-@end
+#include "../common/metal_view.h"
 
 @interface FrameView : NSObject
 
