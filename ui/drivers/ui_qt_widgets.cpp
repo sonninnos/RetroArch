@@ -4789,6 +4789,8 @@ typedef struct qt_download_userdata
    bool is_playlist_download;
 } qt_download_userdata_t;
 
+
+#ifdef HAVE_NETWORKING
 static void cb_extract_thumbnail_pack(retro_task_t *task,
       void *task_data, void *user_data, const char *err)
 {
@@ -4810,7 +4812,6 @@ static void cb_extract_thumbnail_pack(retro_task_t *task,
    mainwindow->onThumbnailPackExtractFinished(!err || !*err);
 }
 
-#ifdef HAVE_NETWORKING
 static void cb_http_thumbnail_pack(retro_task_t *task,
       void *task_data, void *user_data, const char *err)
 {
@@ -5893,7 +5894,11 @@ QWidget *NetplayPage::widget()
    serverForm->add(menu_setting_find_enum(MENU_ENUM_LABEL_NETPLAY_SPECTATE_PASSWORD));
    serverForm->add(menu_setting_find_enum(MENU_ENUM_LABEL_NETPLAY_NAT_TRAVERSAL));
 
-   serverLayout->addWidget(createMitmServerGroup());
+   {
+      QGroupBox *mitmGroup = createMitmServerGroup();
+      if (mitmGroup)
+         serverLayout->addWidget(mitmGroup);
+   }
    serverLayout->addSpacing(30);
    serverLayout->addLayout(serverForm);
 
@@ -5941,6 +5946,7 @@ QWidget *NetplayPage::widget()
 
 QGroupBox *NetplayPage::createMitmServerGroup()
 {
+#ifdef HAVE_NETWORKING
    size_t i;
    const char *netplay_mitm_server;
    CheckableSettingsGroup *groupBox = new CheckableSettingsGroup(
@@ -5978,10 +5984,14 @@ QGroupBox *NetplayPage::createMitmServerGroup()
 #endif
 
    return groupBox;
+#else
+   return nullptr;
+#endif
 }
 
 void NetplayPage::onRadioButtonClicked(int id)
 {
+#ifdef HAVE_NETWORKING
    rarch_setting_t *setting =
       menu_setting_find_enum(MENU_ENUM_LABEL_NETPLAY_MITM_SERVER);
 
@@ -5990,6 +6000,9 @@ void NetplayPage::onRadioButtonClicked(int id)
 
    strlcpy(setting->value.target.string,
          netplay_mitm_server_list[id].name, setting->size);
+#else
+   (void)id;
+#endif
 }
 
 UpdaterPage::UpdaterPage(QObject *parent) :
