@@ -3434,7 +3434,7 @@ bool command_event(enum event_command cmd, void *data)
                else
                {
                   msg[0] = '\0';
-                  if (desc && *desc)
+                  if (*desc)
                      _len = snprintf(msg, sizeof(msg),
                         msg_hash_to_str(MSG_SCREEN_RESOLUTION_DESC),
                         width, height, desc);

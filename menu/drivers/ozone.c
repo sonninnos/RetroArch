@@ -5697,7 +5697,6 @@ static void ozone_compute_entries_position(ozone_handle_t *ozone,
 {
    size_t i;
    /* Compute entries height and adjust scrolling if needed */
-   unsigned video_info_height    = ozone->last_height;
    unsigned video_info_width     = ozone->last_width;
    struct menu_state *menu_st    = menu_state_get_ptr();
    menu_list_t *menu_list        = menu_st->entries.list;

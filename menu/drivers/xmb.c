@@ -6478,7 +6478,6 @@ static void xmb_layout(xmb_handle_t *xmb)
 {
    unsigned i;
    unsigned width               = xmb->last_width;
-   unsigned height              = xmb->last_height;
    struct menu_state   *menu_st = menu_state_get_ptr();
    menu_list_t *menu_list       = menu_st->entries.list;
    file_list_t *selection_buf   = MENU_LIST_GET_SELECTION(menu_list, 0);
