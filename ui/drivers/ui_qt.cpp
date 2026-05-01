@@ -1945,12 +1945,9 @@ void MainWindow::setupSignalConnections()
          this, SLOT(onThumbnailPackDownloadCanceled()));
 
    connect(this, SIGNAL(itemChanged()), this, SLOT(onItemChanged()));
-   connect(this, SIGNAL(gotThumbnailDownload(QString,QString)),
-         this, SLOT(onDownloadThumbnail(QString,QString)));
 
    m_thumbnailTimer->setSingleShot(true);
    connect(m_thumbnailTimer, SIGNAL(timeout()), this, SLOT(updateVisibleItems()));
-   connect(this, SIGNAL(updateThumbnails()), this, SLOT(updateVisibleItems()));
 
    /* TODO: Handle scroll and resize differently. */
    connect(m_gridView, SIGNAL(visibleItemsChangedMaybe()),
@@ -1991,18 +1988,12 @@ void MainWindow::setupSignalConnections()
          SLOT(onGotReloadShaderParams()), Qt::AutoConnection);
 #endif
 #endif
-   connect(this, SIGNAL(gotReloadCoreOptions()), this,
-         SLOT(onGotReloadCoreOptions()), Qt::AutoConnection);
 
    /* These are always queued */
    connect(this, SIGNAL(showErrorMessageDeferred(QString)), this,
          SLOT(onShowErrorMessage(QString)), Qt::QueuedConnection);
    connect(this, SIGNAL(showInfoMessageDeferred(QString)), this,
          SLOT(onShowInfoMessage(QString)), Qt::QueuedConnection);
-   connect(this, SIGNAL(extractArchiveDeferred(QString,QString,
-               QString,retro_task_callback_t)), this,
-         SLOT(onExtractArchive(QString,QString,QString,retro_task_callback_t)),
-         Qt::QueuedConnection);
 }
 
 MainWindow::~MainWindow()
@@ -2585,12 +2576,11 @@ QString MainWindow::changeThumbnail(const QImage &image, QString type)
    QByteArray thumbArray        = QDir::toNativeSeparators(thumbPath).toUtf8();
    const char *thumbData        = thumbArray.constData();
    int quality                  = -1;
-   QDir dir(dirString);
    QImage scaledImage(image);
 
-   if (!dir.exists())
+   if (!path_is_directory(dirData))
    {
-      if (!dir.mkpath("."))
+      if (!path_mkdir(dirData))
       {
          RARCH_ERR("[Qt] Could not create directory: \"%s\".\n", dirData);
          return QString();
@@ -3115,41 +3105,34 @@ void MainWindow::setCoreActions()
       {
          QString coreName = hash["core_name"];
 
-         if (coreName.isEmpty())
-            coreName = QString("<n/a>");
-         else
+         if (!coreName.isEmpty() && coreName != QLatin1String("DETECT"))
          {
-            const char *detect_str = "DETECT";
-
-            if (coreName != detect_str)
+            if (m_launchWithComboBox->findText(coreName) == -1)
             {
-               if (m_launchWithComboBox->findText(coreName) == -1)
+               int i;
+               bool found_existing = false;
+
+               for (i = 0; i < m_launchWithComboBox->count(); i++)
                {
-                  int i;
-                  bool found_existing = false;
+                  QVariantMap map = m_launchWithComboBox->itemData(
+                        i, Qt::UserRole).toMap();
 
-                  for (i = 0; i < m_launchWithComboBox->count(); i++)
+                  if (     map.value("core_path").toString() == hash["core_path"]
+                        || map.value("core_name").toString() == coreName)
                   {
-                     QVariantMap map = m_launchWithComboBox->itemData(
-                           i, Qt::UserRole).toMap();
-
-                     if (     map.value("core_path").toString() == hash["core_path"]
-                           || map.value("core_name").toString() == coreName)
-                     {
-                        found_existing = true;
-                        break;
-                     }
+                     found_existing = true;
+                     break;
                   }
+               }
 
-                  if (!found_existing)
-                  {
-                     QVariantMap comboBoxMap;
-                     comboBoxMap["core_name"]      = coreName;
-                     comboBoxMap["core_path"]      = hash["core_path"];
-                     comboBoxMap["core_selection"] = CORE_SELECTION_PLAYLIST_SAVED;
-                     m_launchWithComboBox->addItem(coreName,
-                           QVariant::fromValue(comboBoxMap));
-                  }
+               if (!found_existing)
+               {
+                  QVariantMap comboBoxMap;
+                  comboBoxMap["core_name"]      = coreName;
+                  comboBoxMap["core_path"]      = hash["core_path"];
+                  comboBoxMap["core_selection"] = CORE_SELECTION_PLAYLIST_SAVED;
+                  m_launchWithComboBox->addItem(coreName,
+                        QVariant::fromValue(comboBoxMap));
                }
             }
          }
@@ -3193,12 +3176,9 @@ void MainWindow::setCoreActions()
 
             if (allPlaylists)
             {
-               QFileInfo info;
                QListWidgetItem *listItem = m_listWidget->item(row);
                QString    listItemString = listItem->data(
                      Qt::UserRole).toString();
-
-               info.setFile(listItemString);
 
                if (listItemString == ALL_PLAYLISTS_TOKEN)
                   continue;
@@ -3467,7 +3447,6 @@ void MainWindow::onShowHiddenDockWidgetAction()
    }
 }
 
-QWidget* MainWindow::searchWidget()     { return m_searchWidget; }
 QLineEdit* MainWindow::searchLineEdit() { return m_searchLineEdit; }
 void MainWindow::onSearchEnterPressed()
 {
@@ -3723,12 +3702,10 @@ void MainWindow::onCurrentListItemChanged(
    setCoreActions();
 }
 
-TableView* MainWindow::contentTableView()     { return m_tableView; }
 QTableView* MainWindow::fileTableView()       { return m_fileTableView; }
 QStackedWidget* MainWindow::centralWidget()   { return m_centralWidget; }
 FileDropWidget* MainWindow::playlistViews()   { return m_playlistViews; }
 QWidget* MainWindow::playlistViewsAndFooter() {return m_playlistViewsAndFooter;}
-GridView* MainWindow::contentGridView()       { return m_gridView; }
 
 void MainWindow::onBrowserDownloadsClicked()
 {
@@ -5041,7 +5018,7 @@ static void qt_companion_select_initial_playlist(QListWidget *listWidget,
    int i;
    bool found = false;
 
-   for (i = 0; listWidget->count() && i < listWidget->count(); i++)
+   for (i = 0; i < listWidget->count(); i++)
    {
       QListWidgetItem *item = listWidget->item(i);
       QString path;
@@ -5064,7 +5041,7 @@ static void qt_companion_select_initial_playlist(QListWidget *listWidget,
       return;
 
    /* Couldn't find the user's initial playlist, just find anything. */
-   for (i = 0; listWidget->count() && i < listWidget->count(); i++)
+   for (i = 0; i < listWidget->count(); i++)
    {
       if (!listWidget->isRowHidden(i))
       {

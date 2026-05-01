@@ -2922,8 +2922,6 @@ void CoreOptionsDialog::buildLayout()
 
          if (!contentLabel.isEmpty())
          {
-            uint32_t flags = runloop_st->flags;
-
             if (!label.isEmpty())
             {
                QHBoxLayout *gameOptionsLayout = new QHBoxLayout();

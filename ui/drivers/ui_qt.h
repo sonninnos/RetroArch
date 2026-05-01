@@ -96,15 +96,7 @@ class QSlider;
 class QDragEnterEvent;
 class QDropEvent;
 class QProgressDialog;
-class MainWindow;
-class ThumbnailWidget;
 class ThumbnailLabel;
-class GridView;
-class ShaderParamsDialog;
-class CoreOptionsDialog;
-class CoreInfoDialog;
-class PlaylistEntryDialog;
-class ViewOptionsDialog;
 
 enum SpecialPlaylist
 {
@@ -471,12 +463,9 @@ public:
    PlaylistModel* playlistModel();
    ListWidget* playlistListWidget();
    QStackedWidget* centralWidget();
-   TableView* contentTableView();
    QTableView* fileTableView();
    FileDropWidget* playlistViews();
-   GridView* contentGridView();
    QWidget* playlistViewsAndFooter();
-   QWidget* searchWidget();
    QLineEdit* searchLineEdit();
    QComboBox* launchWithComboBox();
    QToolButton* startCorePushButton();
@@ -524,14 +513,9 @@ signals:
    void gotStatusMessage(QString msg, unsigned priority, unsigned duration, bool flush);
    void gotReloadPlaylists();
    void gotReloadShaderParams();
-   void gotReloadCoreOptions();
    void showErrorMessageDeferred(QString msg);
    void showInfoMessageDeferred(QString msg);
-   void extractArchiveDeferred(QString path, QString extractionDir, QString tempExtension, retro_task_callback_t cb);
    void itemChanged();
-   void updateThumbnails();
-   void gridItemChanged(QString title);
-   void gotThumbnailDownload(QString system, QString title);
    void scrollToDownloads(QString path);
    void scrollToDownloadsAgain(QString path);
 
