@@ -3874,10 +3874,10 @@ bool command_event(enum event_command cmd, void *data)
          /* Closing content via hotkey requires toggling menu
           * and resetting the position later on to prevent
           * going to empty Quick Menu */
-         if (!(menu_state_get_ptr()->flags & MENU_ST_FLAG_ALIVE))
+         if (!(menu_st->flags & MENU_ST_FLAG_ALIVE))
          {
-            menu_state_get_ptr()->flags |= MENU_ST_FLAG_PENDING_CLOSE_CONTENT;
-            menu_state_get_ptr()->flags |= MENU_ST_FLAG_PENDING_RELOAD_CORE;
+            menu_st->flags |= MENU_ST_FLAG_PENDING_CLOSE_CONTENT;
+            menu_st->flags |= MENU_ST_FLAG_PENDING_RELOAD_CORE;
             command_event(CMD_EVENT_MENU_TOGGLE, NULL);
          }
 #else
@@ -4022,7 +4022,7 @@ bool command_event(enum event_command cmd, void *data)
 
 #if defined(HAVE_AUDIOMIXER) && defined(HAVE_MENU)
             audio_enable_menu        = settings->bools.audio_enable_menu
-                  && menu_state_get_ptr()->flags & MENU_ST_FLAG_ALIVE;
+                  && menu_st->flags & MENU_ST_FLAG_ALIVE;
 #endif
 #ifdef HAVE_NETWORKING
             menu_pause_libretro      = settings->bools.menu_pause_libretro
@@ -4046,7 +4046,7 @@ bool command_event(enum event_command cmd, void *data)
 
 #if defined(HAVE_AUDIOMIXER) && defined(HAVE_MENU)
             audio_enable_menu        = settings->bools.audio_enable_menu
-                  && menu_state_get_ptr()->flags & MENU_ST_FLAG_ALIVE;
+                  && menu_st->flags & MENU_ST_FLAG_ALIVE;
 #endif
 #ifdef HAVE_NETWORKING
             menu_pause_libretro      = settings->bools.menu_pause_libretro
@@ -4678,8 +4678,6 @@ bool command_event(enum event_command cmd, void *data)
          {
 #ifdef HAVE_MENU
             struct string_list *str_list = (struct string_list*)data;
-            struct menu_state *menu_st   = menu_state_get_ptr();
-            settings_t *settings         = config_get_ptr();
 
             if (str_list)
             {
@@ -4755,9 +4753,6 @@ bool command_event(enum event_command cmd, void *data)
             size_t *playlist_index         = (size_t*)data;
             struct playlist_entry entry    = {0};
             unsigned i                     = 0;
-#ifdef HAVE_MENU
-            struct menu_state *menu_st     = menu_state_get_ptr();
-#endif
 
             /* the update function reads our entry as const,
              * so these casts are safe */
@@ -5310,9 +5305,6 @@ bool command_event(enum event_command cmd, void *data)
                bool eject                      = !disk_control_get_eject_state(
                                                   &sys_info->disk_control);
                bool verbose                    = true;
-#if defined(HAVE_MENU)
-               struct menu_state *menu_st      = menu_state_get_ptr();
-#endif
 
                if (show_msg)
                   verbose                      = *show_msg;

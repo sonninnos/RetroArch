@@ -8220,7 +8220,6 @@ void input_keyboard_event(bool down, unsigned code,
           ||   (code == RETROK_DELETE)      /* RETRO_DEVICE_ID_JOYPAD_Y */
           ||   (BIT512_GET(input_st->keyboard_mapping_bits, code)))))
       {
-         struct menu_state *menu_st  = menu_state_get_ptr();
          menu_st->flags             &= ~MENU_ST_FLAG_SCREENSAVER_ACTIVE;
          menu_st->input_last_time_us = menu_st->current_time_us;
          if (menu_st->driver_ctx->environ_cb)
