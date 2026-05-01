@@ -2128,38 +2128,36 @@ static bool gl3_init_pipelines(gl3_t *gl)
  **/
 static enum rarch_shader_type gl3_get_fallback_shader_type(enum rarch_shader_type type)
 {
-#if defined(HAVE_SLANG) || defined(HAVE_GLSL) || defined(HAVE_CG)
+#if defined(HAVE_SLANG) || defined(HAVE_GLSL)
    int i;
    gfx_ctx_flags_t flags;
    flags.flags     = 0;
    video_context_driver_get_flags(&flags);
 
-   if (type != RARCH_SHADER_CG && type != RARCH_SHADER_GLSL && type != RARCH_SHADER_SLANG)
+   /* gl3 (glcore video driver) only ever advertises slang via spirv-cross.
+    * Cg requires the legacy fixed-function / ARB asm pipeline that Core
+    * Profile contexts don't expose, and no context driver advertises
+    * GFX_CTX_FLAGS_SHADERS_CG when the active video driver is "glcore"
+    * (see e.g. x_ctx.c, wgl_ctx.c).  Treat any incoming RARCH_SHADER_CG
+    * the same as an unknown type and fall back to slang. */
+   if (type != RARCH_SHADER_GLSL && type != RARCH_SHADER_SLANG)
    {
       type = DEFAULT_SHADER_TYPE;
 
-      if (type != RARCH_SHADER_CG && type != RARCH_SHADER_GLSL && type != RARCH_SHADER_SLANG)
+      if (type != RARCH_SHADER_GLSL && type != RARCH_SHADER_SLANG)
          type = RARCH_SHADER_SLANG;
    }
 
-   for (i = 0; i < 3; i++)
+   for (i = 0; i < 2; i++)
    {
       switch (type)
       {
-         case RARCH_SHADER_CG:
-#ifdef HAVE_CG
-            if (BIT32_GET(flags.flags, GFX_CTX_FLAGS_SHADERS_CG))
-               return type;
-#endif
-            type = RARCH_SHADER_SLANG;
-            break;
-
          case RARCH_SHADER_GLSL:
 #ifdef HAVE_GLSL
             if (BIT32_GET(flags.flags, GFX_CTX_FLAGS_SHADERS_GLSL))
                return type;
 #endif
-            type = RARCH_SHADER_CG;
+            type = RARCH_SHADER_SLANG;
             break;
 
          case RARCH_SHADER_SLANG:
@@ -2231,11 +2229,6 @@ static const shader_backend_t *gl3_shader_driver_set_backend(
 
    switch (fallback)
    {
-#ifdef HAVE_CG
-      case RARCH_SHADER_CG:
-         RARCH_LOG("[GLCore] Using Cg shader backend.\n");
-         return &gl_cg_backend;
-#endif
 #ifdef HAVE_GLSL
       case RARCH_SHADER_GLSL:
          RARCH_LOG("[GLCore] Using GLSL shader backend.\n");
