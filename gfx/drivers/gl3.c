@@ -69,6 +69,14 @@
    coords[5] = yamt; \
    coords[7] = yamt
 
+#if defined(HAVE_SLANG)
+#define GL3_DEFAULT_SHADER_TYPE RARCH_SHADER_SLANG
+#elif defined(HAVE_GLSL)
+#define GL3_DEFAULT_SHADER_TYPE RARCH_SHADER_GLSL
+#else
+#define GL3_DEFAULT_SHADER_TYPE RARCH_SHADER_NONE
+#endif
+
 struct gl3_streamed_texture
 {
    GLuint tex;
@@ -2142,7 +2150,7 @@ static enum rarch_shader_type gl3_get_fallback_shader_type(enum rarch_shader_typ
     * the same as an unknown type and fall back to slang. */
    if (type != RARCH_SHADER_GLSL && type != RARCH_SHADER_SLANG)
    {
-      type = DEFAULT_SHADER_TYPE;
+      type = GL3_DEFAULT_SHADER_TYPE;
 
       if (type != RARCH_SHADER_GLSL && type != RARCH_SHADER_SLANG)
          type = RARCH_SHADER_SLANG;

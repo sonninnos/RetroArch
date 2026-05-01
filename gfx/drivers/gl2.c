@@ -92,6 +92,16 @@
 #define GL_UNSIGNED_INT_8_8_8_8_REV       0x8367
 #endif
 
+#if defined(HAVE_OPENGLES2)
+#define GL2_DEFAULT_SHADER_TYPE RARCH_SHADER_GLSL
+#elif defined(HAVE_GLSL)
+#define GL2_DEFAULT_SHADER_TYPE RARCH_SHADER_GLSL
+#elif defined(HAVE_CG)
+#define GL2_DEFAULT_SHADER_TYPE RARCH_SHADER_CG
+#else
+#define GL2_DEFAULT_SHADER_TYPE RARCH_SHADER_NONE
+#endif
+
 #if defined(HAVE_PSGL)
 #define RARCH_GL_FRAMEBUFFER GL_FRAMEBUFFER_OES
 #define RARCH_GL_FRAMEBUFFER_COMPLETE GL_FRAMEBUFFER_COMPLETE_OES
@@ -2974,7 +2984,7 @@ static enum rarch_shader_type gl2_get_fallback_shader_type(enum rarch_shader_typ
 
    if (type != RARCH_SHADER_CG && type != RARCH_SHADER_GLSL)
    {
-      type = DEFAULT_SHADER_TYPE;
+      type = GL2_DEFAULT_SHADER_TYPE;
 
       if (type != RARCH_SHADER_CG && type != RARCH_SHADER_GLSL)
          type = RARCH_SHADER_GLSL;
