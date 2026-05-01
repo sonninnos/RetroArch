@@ -561,19 +561,17 @@ static bool metal_display_supports_edr(void)
    if (@available(macOS 10.15, *))
    {
       NSScreen *screen = [NSScreen mainScreen];
-      if (!screen)
-         return false;
       /* Potential, not current: the value reflects what the display *could*
        * produce if EDR were enabled, not what's being used right now.
        * That's the right signal for "is HDR an available mode".  SDR-only
        * displays return exactly 1.0. */
-      return screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0;
+      if (screen)
+         return screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0;
    }
-   return false;
 #elif defined(HAVE_COCOATOUCH)
    /* TARGET_OS_TV / TARGET_OS_IOS are always defined to 0 or 1, not
     * just present — have to test the value, not defined-ness. */
-#  if TARGET_OS_TV
+#if TARGET_OS_TV
    /* tvOS: no NSScreen/UIScreen EDR API parallel to macOS.  The device
     * itself (Apple TV 4K) advertises HDR capability via AVDisplayCriteria
     * but that's AVFoundation, not a layer we can plumb into here without
@@ -582,20 +580,16 @@ static bool metal_display_supports_edr(void)
     * is only shipping on HDR-capable hardware (Apple TV 4K). */
    if (@available(tvOS 16.0, *))
       return true;
-   return false;
-#  else
+#else
    if (@available(iOS 16.0, *))
    {
       UIScreen *screen = [UIScreen mainScreen];
-      if (!screen)
-         return false;
-      return screen.potentialEDRHeadroom > 1.0;
+      if (screen)
+         return screen.potentialEDRHeadroom > 1.0;
    }
-   return false;
-#  endif
-#else
-   return false;
 #endif
+#endif
+   return false;
 }
 #endif /* METAL_HDR_AVAILABLE */
 
@@ -5602,7 +5596,7 @@ static bool metal_suppress_screensaver(void *data, bool disable)
 }
 
 static bool metal_set_shader(void *data,
-                             enum rarch_shader_type type, const char *path)
+      enum rarch_shader_type type, const char *path)
 {
 #if defined(HAVE_SLANG) && defined(HAVE_SPIRV_CROSS)
    MetalDriver *md = (__bridge MetalDriver *)data;
