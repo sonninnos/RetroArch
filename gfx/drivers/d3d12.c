@@ -6117,7 +6117,6 @@ static bool d3d12_gpu_hdr_readback_to_bgr24(
    d3d12_texture_t sdr_rt   = { 0 };
    D3D12Resource   readback = NULL;
    D3D12Resource   back_buffer;
-   D3D12_RESOURCE_DESC  sdr_desc;
    D3D12_HEAP_PROPERTIES heap_props;
    D3D12_RESOURCE_DESC   buf_desc;
    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
