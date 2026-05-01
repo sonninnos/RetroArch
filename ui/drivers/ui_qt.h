@@ -267,7 +267,6 @@ public slots:
    void setPixmap(const QPixmap &pixmap);
 protected:
    void paintEvent(QPaintEvent *event);
-   void resizeEvent(QResizeEvent *event);
 private:
    void updateMargins();
 
@@ -284,7 +283,6 @@ public:
 signals:
    void itemsSelected(QModelIndexList selectedIndexes);
 protected slots:
-   void columnCountChanged(int oldCount, int newCount);
    void selectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
 };
 
@@ -301,7 +299,6 @@ class ListWidget : public QListWidget
    Q_OBJECT
 public:
    ListWidget(QWidget *parent = 0);
-   bool isEditorOpen();
 signals:
    void enterPressed();
    void deletePressed();
@@ -317,9 +314,6 @@ public:
    AppHandler(QObject *parent = 0);
    ~AppHandler();
    void exit();
-
-private slots:
-   void onLastWindowClosed();
 };
 
 class CoreInfoLabel : public QLabel

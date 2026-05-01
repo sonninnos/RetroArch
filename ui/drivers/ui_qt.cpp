@@ -1347,11 +1347,6 @@ static int qt_thumbnail_type_to_widget_idx(ThumbnailType t)
 
 TreeView::TreeView(QWidget *parent) : QTreeView(parent) { }
 
-void TreeView::columnCountChanged(int oldCount, int newCount)
-{
-   QTreeView::columnCountChanged(oldCount, newCount);
-}
-
 void TreeView::selectionChanged(const QItemSelection &selected, const QItemSelection &deselected)
 {
    QModelIndexList list = selected.indexes();
@@ -1369,11 +1364,6 @@ bool TableView::isEditorOpen()
 }
 
 ListWidget::ListWidget(QWidget *parent) : QListWidget(parent) { }
-
-bool ListWidget::isEditorOpen()
-{
-   return (state() == QAbstractItemView::EditingState);
-}
 
 void ListWidget::keyPressEvent(QKeyEvent *event)
 {
@@ -4406,8 +4396,6 @@ static void* ui_application_qt_initialize(void)
    ui_application.app->setOrganizationName("libretro");
    ui_application.app->setApplicationName("RetroArch");
    ui_application.app->setApplicationVersion(PACKAGE_VERSION);
-   ui_application.app->connect(ui_application.app, SIGNAL(lastWindowClosed()),
-         app_handler, SLOT(onLastWindowClosed()));
 
 #ifdef Q_OS_UNIX
    setlocale(LC_NUMERIC, "C");
@@ -4473,7 +4461,6 @@ static ui_application_t ui_application_qt = {
 AppHandler::AppHandler(QObject *parent) :
    QObject(parent) { }
 AppHandler::~AppHandler() { }
-void AppHandler::onLastWindowClosed() { }
 
 void AppHandler::exit()
 {
@@ -4646,11 +4633,6 @@ void ThumbnailLabel::paintEvent(QPaintEvent *event)
    }
    else
       QWidget::paintEvent(event);
-}
-
-void ThumbnailLabel::resizeEvent(QResizeEvent *event)
-{
-   QWidget::resizeEvent(event);
 }
 
 static void ui_companion_qt_deinit(void *data)
