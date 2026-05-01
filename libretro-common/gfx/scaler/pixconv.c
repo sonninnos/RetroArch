@@ -347,7 +347,7 @@ void conv_rgb565_abgr8888(void *output_, const void *input_,
       for (; w < max_width; w += 8)
       {
          __m128i res_lo, res_hi;
-         __m128i res_lo_bg, res_hi_bg, res_lo_ra, res_hi_ra;
+         __m128i res_lo_rg, res_hi_rg, res_lo_ba, res_hi_ba;
          const __m128i in = _mm_loadu_si128((const __m128i*)(input + w));
          __m128i        r = _mm_and_si128(_mm_srli_epi16(in, 1), pix_mask_r);
          __m128i        g = _mm_and_si128(in, pix_mask_g);
@@ -355,14 +355,18 @@ void conv_rgb565_abgr8888(void *output_, const void *input_,
          r                = _mm_mulhi_epi16(r, mul16_r);
          g                = _mm_mulhi_epi16(g, mul16_g);
          b                = _mm_mulhi_epi16(b, mul16_b);
-         res_lo_bg        = _mm_unpacklo_epi8(b, g);
-         res_hi_bg        = _mm_unpackhi_epi8(b, g);
-         res_lo_ra        = _mm_unpacklo_epi8(r, a);
-         res_hi_ra        = _mm_unpackhi_epi8(r, a);
-         res_lo           = _mm_or_si128(res_lo_bg,
-               _mm_slli_si128(res_lo_ra, 2));
-         res_hi           = _mm_or_si128(res_hi_bg,
-               _mm_slli_si128(res_hi_ra, 2));
+         /* Output byte order [r g b a] per pixel == ABGR uint32 LE,
+          * matching the scalar fallback below.  Pair (r,g) into the
+          * low half and (b,a) into the high half (shifted up 2 bytes),
+          * not (b,g) and (r,a) which would produce ARGB byte order. */
+         res_lo_rg        = _mm_unpacklo_epi8(r, g);
+         res_hi_rg        = _mm_unpackhi_epi8(r, g);
+         res_lo_ba        = _mm_unpacklo_epi8(b, a);
+         res_hi_ba        = _mm_unpackhi_epi8(b, a);
+         res_lo           = _mm_or_si128(res_lo_rg,
+               _mm_slli_si128(res_lo_ba, 2));
+         res_hi           = _mm_or_si128(res_hi_rg,
+               _mm_slli_si128(res_hi_ba, 2));
          _mm_storeu_si128((__m128i*)(output + w + 0), res_lo);
          _mm_storeu_si128((__m128i*)(output + w + 4), res_hi);
       }
