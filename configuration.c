@@ -4653,14 +4653,16 @@ static bool config_load_file(global_t *global,
    if (!(bool)RHMAP_HAS_STR(conf->entries_map, "user_language"))
       msg_hash_set_uint(MSG_HASH_USER_LANGUAGE, frontend_driver_get_user_language());
 
-   if (frontend_driver_has_gamemode() &&
-         !frontend_driver_set_gamemode(settings->bools.gamemode_enable) &&
-         settings->bools.gamemode_enable)
-   {
-      RARCH_WARN("[Config] GameMode unsupported - disabling...\n");
-      configuration_set_bool(settings,
-            settings->bools.gamemode_enable, false);
-   }
+   /* If GameMode is enabled in the config but libgamemode is not
+    * available, warn once. Do NOT clear the setting: that would
+    * silently overwrite the user's preference in retroarch.cfg, so
+    * a transient failure (sandbox path issue, library not yet
+    * installed, etc.) would force them to re-enable it manually on
+    * every subsequent launch. The probe is latched inside the
+    * frontend driver, so it will not be retried this session. */
+   if (     settings->bools.gamemode_enable
+         && frontend_driver_has_gamemode())
+      frontend_driver_set_gamemode(true);
 
    /* If this is the first run of an existing installation
     * after the independent favourites playlist size limit was
