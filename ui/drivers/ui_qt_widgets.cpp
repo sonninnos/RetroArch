@@ -4810,6 +4810,7 @@ static void cb_extract_thumbnail_pack(retro_task_t *task,
    mainwindow->onThumbnailPackExtractFinished(!err || !*err);
 }
 
+#ifdef HAVE_NETWORKING
 static void cb_http_thumbnail_pack(retro_task_t *task,
       void *task_data, void *user_data, const char *err)
 {
@@ -4969,6 +4970,7 @@ static void cb_http_thumbnail(retro_task_t *task,
 
    free(ud);
 }
+#endif
 
 /* ---- Thumbnail Pack Download ---- */
 
@@ -4984,6 +4986,7 @@ void MainWindow::onThumbnailPackDownloadCanceled()
 
 void MainWindow::downloadAllThumbnails(QString system, QUrl url)
 {
+#ifdef HAVE_NETWORKING
    QString urlString;
    QByteArray urlArray;
    QByteArray fileNameArray;
@@ -5050,6 +5053,11 @@ void MainWindow::downloadAllThumbnails(QString system, QUrl url)
       m_thumbnailPackDownloadProgressDialog->cancel();
       RARCH_ERR("[Qt] Failed to start HTTP task for thumbnail pack.\n");
    }
+#else
+   (void)system;
+   (void)url;
+   RARCH_LOG("[Qt] Thumbnail pack download unavailable: built without networking.\n");
+#endif
 }
 
 void MainWindow::onThumbnailPackExtractFinished(bool success)
@@ -5129,6 +5137,7 @@ void MainWindow::onSingleThumbnailDownloadFinishedInternal(
 
 void MainWindow::downloadThumbnail(QString system, QString title, QUrl url)
 {
+#ifdef HAVE_NETWORKING
    QString urlString;
    QString downloadType;
    QByteArray urlArray;
@@ -5200,6 +5209,13 @@ void MainWindow::downloadThumbnail(QString system, QString title, QUrl url)
       m_thumbnailDownloadProgressDialog->cancel();
       RARCH_ERR("[Qt] Failed to start HTTP task for thumbnail.\n");
    }
+#else
+   (void)system;
+   (void)title;
+   (void)url;
+   m_pendingThumbnailDownloadTypes.clear();
+   RARCH_LOG("[Qt] Thumbnail download unavailable: built without networking.\n");
+#endif
 }
 
 /* ---- Playlist Thumbnail Download ---- */
@@ -5271,6 +5287,7 @@ void MainWindow::onPlaylistThumbnailDownloadFinishedInternal(
 void MainWindow::downloadNextPlaylistThumbnail(
       QString system, QString title, QString type, QUrl url)
 {
+#ifdef HAVE_NETWORKING
    QString urlString;
    QByteArray urlArray;
    QByteArray fileNameArray;
@@ -5351,6 +5368,15 @@ void MainWindow::downloadNextPlaylistThumbnail(
       else
          m_playlistThumbnailDownloadProgressDialog->cancel();
    }
+#else
+   (void)system;
+   (void)title;
+   (void)type;
+   (void)url;
+   m_pendingPlaylistThumbnails.clear();
+   m_playlistThumbnailDownloadProgressDialog->cancel();
+   RARCH_LOG("[Qt] Playlist thumbnail download unavailable: built without networking.\n");
+#endif
 }
 
 void MainWindow::downloadPlaylistThumbnails(QString playlistPath)
