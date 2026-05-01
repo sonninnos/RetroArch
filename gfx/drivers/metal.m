@@ -1363,7 +1363,7 @@ static matrix_float4x4 matrix_proj_ortho(float left, float right, float top, flo
          ca.sourceAlphaBlendFactor      = MTLBlendFactorSourceAlpha;
          ca.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
       }
-      id<MTLRenderPipelineState> s = [_device newRenderPipelineStateWithDescriptor:psd error:&e];
+      id<MTLRenderPipelineState> s = [self->_device newRenderPipelineStateWithDescriptor:psd error:&e];
       if (e)
       {
          RARCH_ERR("[Metal] HDR %s pipeline: %s.\n",
@@ -4952,7 +4952,7 @@ typedef struct MTLALIGN(16)
 
    @try
    {
-      size_t i;
+      unsigned i;
       texture_t *source = NULL;
       if (!video_shader_load_preset_into_shader(path.UTF8String, shader))
          return NO;
