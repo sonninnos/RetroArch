@@ -32,8 +32,9 @@ static bool spirv_cache_get_dir(char *cache_dir_out, size_t cache_dir_out_len)
       return false;
 
    /* Build the spirv subdirectory path */
-   snprintf(cache_dir_out, cache_dir_out_len, "%s/%s",
-         settings->paths.directory_cache, SPIRV_CACHE_SUBDIR);
+   fill_pathname_join_special(cache_dir_out,
+         settings->paths.directory_cache, SPIRV_CACHE_SUBDIR,
+         cache_dir_out_len);
 
    return true;
 }
@@ -65,12 +66,14 @@ static bool spirv_cache_get_filename(const char *hash,
       char *cache_file_out, size_t cache_file_out_len)
 {
    char cache_dir[PATH_MAX_LENGTH];
+   char hash_filename[128];
 
    if (!spirv_cache_get_dir(cache_dir, sizeof(cache_dir)))
       return false;
 
-   snprintf(cache_file_out, cache_file_out_len, "%s/%s.spirv",
-         cache_dir, hash);
+   snprintf(hash_filename, sizeof(hash_filename), "%s.spirv", hash);
+   fill_pathname_join_special(cache_file_out, cache_dir, hash_filename,
+         cache_file_out_len);
 
    return true;
 }
