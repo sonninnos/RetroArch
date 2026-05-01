@@ -65,8 +65,8 @@
 typedef struct sixel
 {
    SIXELSTATUS sixel_status;
-   unsigned video_width;
-   unsigned video_height;
+   unsigned frame_width;
+   unsigned frame_height;
    unsigned screen_width;
    unsigned screen_height;
 } sixel_t;
@@ -380,12 +380,12 @@ static bool sixel_gfx_frame(void *data, const void *frame,
 #endif
    }
 
-   if (sixel->video_width != width || sixel->video_height != height)
+   if (sixel->frame_width != width || sixel->frame_height != height)
    {
       scroll_on_demand(sixel->screen_height);
 
-      sixel->video_width = width;
-      sixel->video_height = height;
+      sixel->frame_width = width;
+      sixel->frame_height = height;
 
       if (sixel_temp_buf)
       {

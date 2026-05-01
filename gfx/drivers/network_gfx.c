@@ -53,8 +53,8 @@ enum
 typedef struct network
 {
    int fd;
-   unsigned video_width;
-   unsigned video_height;
+   unsigned frame_width;
+   unsigned frame_height;
    unsigned screen_width;
    unsigned screen_height;
    uint16_t port;
@@ -223,11 +223,11 @@ static bool network_gfx_frame(void *data, const void *frame,
 #endif
    }
 
-   if (     (network->video_width  != width)
-         || (network->video_height != height))
+   if (     (network->frame_width  != width)
+         || (network->frame_height != height))
    {
-      network->video_width  = width;
-      network->video_height = height;
+      network->frame_width  = width;
+      network->frame_height = height;
 
       if (network_video_temp_buf)
          free(network_video_temp_buf);
