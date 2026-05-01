@@ -2033,7 +2033,7 @@ void video_driver_set_filtering(unsigned index,
             index, smooth, ctx_scaling);
 }
 
-void video_driver_get_size(unsigned *width, unsigned *height)
+void video_driver_get_output_size(unsigned *width, unsigned *height)
 {
    video_driver_state_t *video_st = &video_driver_st;
 #ifdef HAVE_THREADS
@@ -2055,7 +2055,7 @@ void video_driver_get_size(unsigned *width, unsigned *height)
       *height       = video_st->height;
 }
 
-void video_driver_set_size(unsigned width, unsigned height)
+void video_driver_set_output_size(unsigned width, unsigned height)
 {
    video_driver_state_t *video_st = &video_driver_st;
 #ifdef HAVE_THREADS

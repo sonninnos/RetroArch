@@ -4954,9 +4954,9 @@ static void *vulkan_init(const video_info_t *video,
    temp_height = mode_height;
 
    if (temp_width != 0 && temp_height != 0)
-      video_driver_set_size(temp_width, temp_height);
+      video_driver_set_output_size(temp_width, temp_height);
    else
-      video_driver_get_size(&temp_width, &temp_height);
+      video_driver_get_output_size(&temp_width, &temp_height);
    vk->video_width       = temp_width;
    vk->video_height      = temp_height;
    vk->translate_x       = 0.0;
@@ -5304,7 +5304,7 @@ static bool vulkan_alive(void *data)
 
    if (temp_width != 0 && temp_height != 0)
    {
-      video_driver_set_size(temp_width, temp_height);
+      video_driver_set_output_size(temp_width, temp_height);
       vk->video_width  = temp_width;
       vk->video_height = temp_height;
    }

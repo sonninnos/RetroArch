@@ -524,7 +524,7 @@ typedef struct xmb_handle
     * from video_info->{width,height} so non-render code paths
     * (selection_pointer_changed, list_open_new, list_switch_new,
     * list_cache, pointer_up, layout) can read the size without
-    * locking video_st via video_driver_get_size. */
+    * locking video_st via video_driver_get_output_size. */
    unsigned last_width;
    unsigned last_height;
 } xmb_handle_t;
@@ -9482,7 +9482,7 @@ static void *xmb_init(void **userdata, bool video_is_threaded)
    if (!menu)
       return NULL;
 
-   video_driver_get_size(&width, &height);
+   video_driver_get_output_size(&width, &height);
 
    if (!(xmb = (xmb_handle_t*)calloc(1, sizeof(xmb_handle_t))))
    {

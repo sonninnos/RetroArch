@@ -282,7 +282,7 @@ static void video_shader_replace_wildcards_impl(
                {
                   unsigned viewport_width  = 0;
                   unsigned viewport_height = 0;
-                  video_driver_get_size(&viewport_width, &viewport_height);
+                  video_driver_get_output_size(&viewport_width, &viewport_height);
                   _len = strlcpy(replace_text,
                         (viewport_height > 0 && (float)viewport_width / viewport_height < 1)
                         ? "VIEW-ASPECT-ORIENT-VERT"

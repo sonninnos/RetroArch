@@ -2361,7 +2361,7 @@ static void *d3d10_gfx_init(const video_info_t* video,
    d3d10->device->lpVtbl->OMSetRenderTargets(d3d10->device, 1,
          &d3d10->renderTargetView, NULL);
 
-   video_driver_set_size(d3d10->vp.full_width, d3d10->vp.full_height);
+   video_driver_set_output_size(d3d10->vp.full_width, d3d10->vp.full_height);
    d3d10->viewport.Width  = d3d10->vp.full_width;
    d3d10->viewport.Height = d3d10->vp.full_height;
    d3d10->flags          |= D3D10_ST_FLAG_RESIZE_VIEWPORT;
@@ -2925,7 +2925,7 @@ static bool d3d10_gfx_frame(
       d3d10->flags                       &= ~D3D10_ST_FLAG_RESIZE_CHAIN;
       d3d10->flags                       |=  D3D10_ST_FLAG_RESIZE_VIEWPORT;
 
-      video_driver_set_size(video_width, video_height);
+      video_driver_set_output_size(video_width, video_height);
    }
 
 #if 0
@@ -3513,7 +3513,7 @@ static bool d3d10_gfx_alive(void* data)
    if (     (d3d10->flags & D3D10_ST_FLAG_RESIZE_CHAIN)
          && (d3d10->vp.full_width  != 0)
          && (d3d10->vp.full_height != 0))
-      video_driver_set_size(d3d10->vp.full_width, d3d10->vp.full_height);
+      video_driver_set_output_size(d3d10->vp.full_width, d3d10->vp.full_height);
 
    return !quit;
 }

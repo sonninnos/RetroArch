@@ -3961,7 +3961,7 @@ font_renderer_t metal_raster_font = {
 {
    _viewport->full_width   = width;
    _viewport->full_height  = height;
-   video_driver_set_size(_viewport->full_width, _viewport->full_height);
+   video_driver_set_output_size(_viewport->full_width, _viewport->full_height);
    _layer.drawableSize     = CGSizeMake(width, height);
    video_driver_update_viewport(_viewport, forceFull, _keepAspect, YES);
    _context.viewport       = _viewport; /* Update matrix */

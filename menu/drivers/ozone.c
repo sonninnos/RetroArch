@@ -9303,7 +9303,7 @@ static void *ozone_init(void **userdata, bool video_is_threaded)
    for (i = 0; i < 15; i++)
       ozone->pure_white[i]                      = 1.00f;
 
-   video_driver_get_size(&width, &height);
+   video_driver_get_output_size(&width, &height);
 
    /* Also used as a tag for cursor animation */
    ozone->default_theme                         = &ozone_theme_dark; 

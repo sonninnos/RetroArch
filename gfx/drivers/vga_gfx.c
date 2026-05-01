@@ -355,7 +355,7 @@ static bool vga_gfx_alive(void *data)
 {
    vga_t *vga = (vga_t*)data;
    /* TODO/FIXME - check if this is valid */
-   video_driver_set_size(vga->vga_video_width, vga->vga_video_height);
+   video_driver_set_output_size(vga->vga_video_width, vga->vga_video_height);
    return true;
 }
 

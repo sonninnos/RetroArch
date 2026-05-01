@@ -1263,9 +1263,9 @@ static void *gl1_init(const video_info_t *video,
    /* Get real known video size, which might have been altered by context. */
 
    if (temp_width != 0 && temp_height != 0)
-      video_driver_set_size(temp_width, temp_height);
+      video_driver_set_output_size(temp_width, temp_height);
    else
-      video_driver_get_size(&temp_width, &temp_height);
+      video_driver_get_output_size(&temp_width, &temp_height);
    gl1->vp.full_width  = temp_width;
    gl1->vp.full_height = temp_height;
 
@@ -2006,7 +2006,7 @@ static bool gl1_alive(void *data)
 
    if (temp_width != 0 && temp_height != 0)
    {
-      video_driver_set_size(temp_width, temp_height);
+      video_driver_set_output_size(temp_width, temp_height);
       gl1->vp.full_width  = temp_width;
       gl1->vp.full_height = temp_height;
    }
@@ -2092,7 +2092,7 @@ static void gl1_viewport_info(void *data, struct video_viewport *vp)
 
    /* gl1->vp carries full_width/full_height (written at every
     * set_size call site), so the struct copy populates them
-    * directly without a video_driver_get_size round-trip. */
+    * directly without a video_driver_get_output_size round-trip. */
    *vp             = gl1->vp;
 
    /* Adjust as GL viewport is bottom-up. */

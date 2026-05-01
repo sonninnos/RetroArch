@@ -3366,7 +3366,7 @@ static float materialui_get_scroll(materialui_handle_t *mui,
       return 0;
 
    /* Read cached size from mui rather than locking video_st via
-    * video_driver_get_size: mui->last_{width,height} is updated
+    * video_driver_get_output_size: mui->last_{width,height} is updated
     * every frame in materialui_render. */
    height = mui->last_height;
 
@@ -9129,7 +9129,7 @@ static void *materialui_init(void **userdata, bool video_is_threaded)
 
    /* Get DPI/screen-size-aware base unit size for
     * UI elements */
-   video_driver_get_size(&width, &height);
+   video_driver_get_output_size(&width, &height);
 
    mui->last_width                        = width;
    mui->last_height                       = height;
@@ -11020,7 +11020,7 @@ static int materialui_pointer_up(void *userdata,
       return -1;
 
    /* Read cached size from mui rather than locking video_st via
-    * video_driver_get_size: mui->last_{width,height} is updated
+    * video_driver_get_output_size: mui->last_{width,height} is updated
     * every frame in materialui_render. */
 
    /* All input is ignored if user was previously

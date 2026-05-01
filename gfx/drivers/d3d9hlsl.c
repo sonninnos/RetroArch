@@ -7191,13 +7191,13 @@ static bool d3d9_hlsl_init_internal(d3d9_video_t *d3d,
    {
       unsigned new_width  = info->fullscreen ? full_x : info->width;
       unsigned new_height = info->fullscreen ? full_y : info->height;
-      video_driver_set_size(new_width, new_height);
+      video_driver_set_output_size(new_width, new_height);
       d3d->vp.full_width  = new_width;
       d3d->vp.full_height = new_height;
 
 #ifdef HAVE_WINDOW
       /* Use new_width / new_height directly rather than reading
-       * them back via video_driver_get_size: nothing in the
+       * them back via video_driver_get_output_size: nothing in the
        * codebase writes video_st->width / height between the
        * set_size above and this call except us. */
       if (!win32_set_video_mode(d3d, new_width, new_height,
@@ -8163,7 +8163,7 @@ static void d3d9_hlsl_set_resize(d3d9_video_t *d3d,
 
    d3d->video_info.width  = new_width;
    d3d->video_info.height = new_height;
-   video_driver_set_size(new_width, new_height);
+   video_driver_set_output_size(new_width, new_height);
    d3d->vp.full_width     = new_width;
    d3d->vp.full_height    = new_height;
 }
@@ -8200,7 +8200,7 @@ static bool d3d9_hlsl_alive(void *data)
    if (  temp_width  != 0 &&
          temp_height != 0)
    {
-      video_driver_set_size(temp_width, temp_height);
+      video_driver_set_output_size(temp_width, temp_height);
       d3d->vp.full_width  = temp_width;
       d3d->vp.full_height = temp_height;
    }
