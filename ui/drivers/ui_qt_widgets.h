@@ -18,6 +18,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QString>
 #include <QStyledItemDelegate>
 #include <QToolButton>
 
@@ -55,6 +56,27 @@ class OptionsCategory;
 class QListWidget;
 class QStackedLayout;
 #endif
+
+/* Content schema describing a single playlist row. Replaces the
+ * QHash<QString,QString> previously stored in PlaylistModel and
+ * passed around as the playlist row payload. The field set is the
+ * same keys the QHash carried; making it a struct removes a class
+ * of stringly-typed lookup bugs and a lot of toUtf8/from-key
+ * round trips at call sites. */
+struct PlaylistEntry
+{
+   QString path;
+   QString label;
+   QString labelNoExt;
+   QString corePath;
+   QString coreName;
+   QString crc32;
+   QString dbName;
+   QString plName;
+   QString plPath;
+   unsigned index = 0;
+};
+Q_DECLARE_METATYPE(PlaylistEntry)
 
 class FormLayout : public QFormLayout
 {
@@ -840,9 +862,9 @@ public:
    const QStringList getSelectedExtensions();
    bool filterInArchive();
    bool nameFieldEnabled();
-   void setEntryValues(const QHash<QString, QString> &contentHash);
+   void setEntryValues(const PlaylistEntry &entry);
 public slots:
-   bool showDialog(const QHash<QString, QString> &hash = QHash<QString, QString>());
+   bool showDialog(const PlaylistEntry &entry = PlaylistEntry());
    void hideDialog();
    void onAccepted();
    void onRejected();

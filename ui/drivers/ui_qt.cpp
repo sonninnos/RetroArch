@@ -1504,7 +1504,6 @@ MainWindow::MainWindow(QWidget *parent) :
    ,m_thumbnailType(THUMBNAIL_TYPE_BOXART)
    ,m_gridProgressBar(NULL)
    ,m_gridProgressWidget(NULL)
-   ,m_currentGridHash()
    ,m_currentGridWidget(NULL)
    ,m_allPlaylistsListMaxCount(0)
    ,m_allPlaylistsGridMaxCount(0)
@@ -1545,6 +1544,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
    qRegisterMetaType<QPointer<ThumbnailWidget> >("ThumbnailWidget");
    qRegisterMetaType<retro_task_callback_t>("retro_task_callback_t");
+   qRegisterMetaType<PlaylistEntry>("PlaylistEntry");
 
    memset(m_thumbnailPixmaps, 0, sizeof(m_thumbnailPixmaps));
 
@@ -2564,13 +2564,13 @@ void MainWindow::changeThumbnailType(ThumbnailType type)
 
 QString MainWindow::changeThumbnail(const QImage &image, QString type)
 {
-   QHash<QString, QString> hash = getCurrentContentHash();
+   PlaylistEntry entry          = getCurrentContentEntry();
    QString dirString            = m_playlistModel->getPlaylistThumbnailsDir(
-                                      hash["db_name"])
+                                      entry.dbName)
                                 + QString("/") + type;
    QString thumbPath            = m_playlistModel->getSanitizedThumbnailName(
                                       dirString + QString("/"),
-                                      hash["label_noext"]);
+                                      entry.labelNoExt);
    QByteArray   dirArray        = QDir::toNativeSeparators(dirString).toUtf8();
    const char   *dirData        = dirArray.constData();
    QByteArray thumbArray        = QDir::toNativeSeparators(thumbPath).toUtf8();
@@ -2711,7 +2711,7 @@ void MainWindow::onFileDoubleClicked(const QModelIndex &proxyIndex)
    if (m_fileModel->isDir(index))
       m_dirTree->setCurrentIndex(m_dirModel->index(m_fileModel->filePath(index)));
    else
-      loadContent(getFileContentHash(index));
+      loadContent(getFileContentEntry(index));
 }
 
 void MainWindow::selectBrowserDir(QString path)
@@ -2773,22 +2773,22 @@ QModelIndex MainWindow::getCurrentContentIndex()
    return QModelIndex();
 }
 
-QHash<QString, QString> MainWindow::getCurrentContentHash()
+PlaylistEntry MainWindow::getCurrentContentEntry()
 {
-   return getCurrentContentIndex().data(PlaylistModel::HASH).value<QHash<QString, QString> >();
+   return getCurrentContentIndex().data(PlaylistModel::ENTRY).value<PlaylistEntry>();
 }
 
-QHash<QString, QString> MainWindow::getFileContentHash(const QModelIndex &index)
+PlaylistEntry MainWindow::getFileContentEntry(const QModelIndex &index)
 {
-   QHash<QString, QString> hash;
+   PlaylistEntry entry;
    QFileInfo fileInfo  = m_fileModel->fileInfo(index);
 
-   hash["path"]        = QDir::toNativeSeparators(m_fileModel->filePath(index));
-   hash["label"]       = hash["path"];
-   hash["label_noext"] = fileInfo.completeBaseName();
-   hash["db_name"]     = fileInfo.dir().dirName();
+   entry.path          = QDir::toNativeSeparators(m_fileModel->filePath(index));
+   entry.label         = entry.path;
+   entry.labelNoExt    = fileInfo.completeBaseName();
+   entry.dbName        = fileInfo.dir().dirName();
 
-   return hash;
+   return entry;
 }
 
 void MainWindow::onContentItemDoubleClicked(const QModelIndex &index)
@@ -2819,7 +2819,7 @@ void MainWindow::onStartCoreClicked()
  * mode, no current item, or no default core for the playlist). */
 QString MainWindow::getSelectedCorePath()
 {
-   QHash<QString, QString> contentHash;
+   PlaylistEntry entry;
    QVariantMap coreMap          = m_launchWithComboBox->currentData(
          Qt::UserRole).value<QVariantMap>();
    core_selection coreSelection = static_cast<core_selection>(
@@ -2829,10 +2829,10 @@ QString MainWindow::getSelectedCorePath()
    /* The content row only matters for the two playlist branches —
     * CORE_SELECTION_CURRENT just hands back whatever core is loaded.
     * Original behaviour: an "other" view type (e.g. while transitioning)
-    * returned an empty hash from all three branches. */
+    * returned an empty entry from all three branches. */
    if (viewType == VIEW_TYPE_LIST || viewType == VIEW_TYPE_ICONS)
-      contentHash = getCurrentContentIndex().data(PlaylistModel::HASH)
-            .value<QHash<QString, QString> >();
+      entry = getCurrentContentIndex().data(PlaylistModel::ENTRY)
+            .value<PlaylistEntry>();
    else
       return QString();
 
@@ -2841,20 +2841,16 @@ QString MainWindow::getSelectedCorePath()
       case CORE_SELECTION_CURRENT:
          return QString::fromUtf8(path_get(RARCH_PATH_CORE));
       case CORE_SELECTION_PLAYLIST_SAVED:
-         if (    !contentHash.isEmpty()
-              && !contentHash["core_path"].isEmpty())
-            return contentHash["core_path"];
+         if (!entry.corePath.isEmpty())
+            return entry.corePath;
          break;
       case CORE_SELECTION_PLAYLIST_DEFAULT:
          {
             QString plName;
             QString defaultCorePath;
 
-            if (contentHash.isEmpty())
-               break;
-
-            plName = contentHash["pl_name"].isEmpty()
-                  ? contentHash["db_name"] : contentHash["pl_name"];
+            plName = entry.plName.isEmpty()
+                  ? entry.dbName : entry.plName;
 
             if (plName.isEmpty())
                break;
@@ -2883,7 +2879,7 @@ core_name   - The display name of the core, or "DETECT" if unknown
 label_noext - The display name of the content that is guaranteed not
               to contain a file extension
 */
-void MainWindow::loadContent(const QHash<QString, QString> &contentHash)
+void MainWindow::loadContent(const PlaylistEntry &entry)
 {
    content_ctx_info_t content_info;
    QByteArray corePathArray;
@@ -2916,9 +2912,9 @@ void MainWindow::loadContent(const QHash<QString, QString> &contentHash)
    {
       QStringList extensionFilters;
 
-      if (contentHash.contains("path"))
+      if (!entry.path.isEmpty())
       {
-         QByteArray pathArray = contentHash["path"].toUtf8();
+         QByteArray pathArray = entry.path.toUtf8();
          const char *pathData = pathArray.constData();
          const char *ext      = path_get_extension(pathData);
 
@@ -2959,26 +2955,26 @@ void MainWindow::loadContent(const QHash<QString, QString> &contentHash)
    {
       case CORE_SELECTION_CURRENT:
          corePathArray     = path_get(RARCH_PATH_CORE);
-         contentPathArray  = contentHash["path"].toUtf8();
-         contentLabelArray = contentHash["label_noext"].toUtf8();
+         contentPathArray  = entry.path.toUtf8();
+         contentLabelArray = entry.labelNoExt.toUtf8();
          break;
       case CORE_SELECTION_PLAYLIST_SAVED:
-         corePathArray     = contentHash["core_path"].toUtf8();
-         contentPathArray  = contentHash["path"].toUtf8();
-         contentLabelArray = contentHash["label_noext"].toUtf8();
+         corePathArray     = entry.corePath.toUtf8();
+         contentPathArray  = entry.path.toUtf8();
+         contentLabelArray = entry.labelNoExt.toUtf8();
          break;
       case CORE_SELECTION_PLAYLIST_DEFAULT:
       {
-         QString plName = contentHash["pl_name"].isEmpty()
-               ? contentHash["db_name"] : contentHash["pl_name"];
+         QString plName = entry.plName.isEmpty()
+               ? entry.dbName : entry.plName;
 
          QString defaultCorePath = getPlaylistDefaultCore(plName);
 
          if (!defaultCorePath.isEmpty())
          {
             corePathArray     = defaultCorePath.toUtf8();
-            contentPathArray  = contentHash["path"].toUtf8();
-            contentLabelArray = contentHash["label_noext"].toUtf8();
+            contentPathArray  = entry.path.toUtf8();
+            contentLabelArray = entry.labelNoExt.toUtf8();
          }
 
          break;
@@ -2987,8 +2983,8 @@ void MainWindow::loadContent(const QHash<QString, QString> &contentHash)
          return;
    }
 
-   contentDbNameArray         = contentHash["db_name"].toUtf8();
-   contentCrc32Array          = contentHash["crc32"].toUtf8();
+   contentDbNameArray         = entry.dbName.toUtf8();
+   contentCrc32Array          = entry.crc32.toUtf8();
 
    core_path                  = corePathArray.constData();
    content_path               = contentPathArray.constData();
@@ -3047,21 +3043,21 @@ void MainWindow::loadContent(const QHash<QString, QString> &contentHash)
 
 void MainWindow::onRunClicked()
 {
-   QHash<QString, QString> contentHash;
+   PlaylistEntry entry;
 
    switch (m_currentBrowser)
    {
       case BROWSER_TYPE_FILES:
-         contentHash = getFileContentHash(
+         entry = getFileContentEntry(
                m_proxyFileModel->mapToSource(m_fileTableView->currentIndex()));
          break;
       case BROWSER_TYPE_PLAYLISTS:
-         contentHash = getCurrentContentHash();
+         entry = getCurrentContentEntry();
          break;
    }
 
-   if (!contentHash.isEmpty())
-      loadContent(contentHash);
+   if (!entry.path.isEmpty())
+      loadContent(entry);
 }
 
 PlaylistEntryDialog* MainWindow::playlistEntryDialog()
@@ -3074,7 +3070,7 @@ ViewOptionsDialog* MainWindow::viewOptionsDialog() {return m_viewOptionsDialog;}
 void MainWindow::setCoreActions()
 {
    QListWidgetItem *currentPlaylistItem = m_listWidget->currentItem();
-   QHash<QString, QString>         hash = getCurrentContentHash();
+   PlaylistEntry                  entry = getCurrentContentEntry();
    QString      currentPlaylistFileName = QString();
    rarch_system_info_t *sys_info        = &runloop_state_get_ptr()->system;
 
@@ -3101,39 +3097,36 @@ void MainWindow::setCoreActions()
 
    if (m_currentBrowser == BROWSER_TYPE_PLAYLISTS)
    {
-      if (!hash.isEmpty())
+      const QString &coreName = entry.coreName;
+
+      if (!coreName.isEmpty() && coreName != QLatin1String("DETECT"))
       {
-         QString coreName = hash["core_name"];
-
-         if (!coreName.isEmpty() && coreName != QLatin1String("DETECT"))
+         if (m_launchWithComboBox->findText(coreName) == -1)
          {
-            if (m_launchWithComboBox->findText(coreName) == -1)
+            int i;
+            bool found_existing = false;
+
+            for (i = 0; i < m_launchWithComboBox->count(); i++)
             {
-               int i;
-               bool found_existing = false;
+               QVariantMap map = m_launchWithComboBox->itemData(
+                     i, Qt::UserRole).toMap();
 
-               for (i = 0; i < m_launchWithComboBox->count(); i++)
+               if (     map.value("core_path").toString() == entry.corePath
+                     || map.value("core_name").toString() == coreName)
                {
-                  QVariantMap map = m_launchWithComboBox->itemData(
-                        i, Qt::UserRole).toMap();
-
-                  if (     map.value("core_path").toString() == hash["core_path"]
-                        || map.value("core_name").toString() == coreName)
-                  {
-                     found_existing = true;
-                     break;
-                  }
+                  found_existing = true;
+                  break;
                }
+            }
 
-               if (!found_existing)
-               {
-                  QVariantMap comboBoxMap;
-                  comboBoxMap["core_name"]      = coreName;
-                  comboBoxMap["core_path"]      = hash["core_path"];
-                  comboBoxMap["core_selection"] = CORE_SELECTION_PLAYLIST_SAVED;
-                  m_launchWithComboBox->addItem(coreName,
-                        QVariant::fromValue(comboBoxMap));
-               }
+            if (!found_existing)
+            {
+               QVariantMap comboBoxMap;
+               comboBoxMap["core_name"]      = coreName;
+               comboBoxMap["core_path"]      = entry.corePath;
+               comboBoxMap["core_selection"] = CORE_SELECTION_PLAYLIST_SAVED;
+               m_launchWithComboBox->addItem(coreName,
+                     QVariant::fromValue(comboBoxMap));
             }
          }
       }
@@ -3142,8 +3135,8 @@ void MainWindow::setCoreActions()
    switch(m_currentBrowser)
    {
       case BROWSER_TYPE_PLAYLISTS:
-         currentPlaylistFileName = hash["pl_name"].isEmpty()
-               ? hash["db_name"] : hash["pl_name"];
+         currentPlaylistFileName = entry.plName.isEmpty()
+               ? entry.dbName : entry.plName;
          break;
       case BROWSER_TYPE_FILES:
          currentPlaylistFileName = m_fileModel->rootDirectory().dirName();
@@ -3456,16 +3449,16 @@ void MainWindow::onSearchEnterPressed()
 void MainWindow::onCurrentTableItemDataChanged(const QModelIndex &topLeft,
       const QModelIndex &bottomRight, const QVector<int> &roles)
 {
-   QHash<QString, QString> hash;
+   PlaylistEntry entry;
 
    if (!roles.contains(Qt::EditRole))
       return;
    if (topLeft != bottomRight)
       return;
 
-   hash = topLeft.data(PlaylistModel::HASH).value<QHash<QString, QString>>();
+   entry = topLeft.data(PlaylistModel::ENTRY).value<PlaylistEntry>();
 
-   updateCurrentPlaylistEntry(hash);
+   updateCurrentPlaylistEntry(entry);
 
    onCurrentItemChanged(topLeft);
 }
@@ -3551,20 +3544,20 @@ void MainWindow::renamePlaylistItem(QListWidgetItem *item, QString newName)
 void MainWindow::onCurrentItemChanged(const QModelIndex &index)
 {
    onCurrentItemChanged(index.data(
-            PlaylistModel::HASH).value<QHash<QString, QString>>());
+            PlaylistModel::ENTRY).value<PlaylistEntry>());
 }
 
 void MainWindow::onCurrentFileChanged(const QModelIndex &index)
 {
-   onCurrentItemChanged(getFileContentHash(
+   onCurrentItemChanged(getFileContentEntry(
             m_proxyFileModel->mapToSource(index)));
 }
 
-void MainWindow::onCurrentItemChanged(const QHash<QString, QString> &hash)
+void MainWindow::onCurrentItemChanged(const PlaylistEntry &entry)
 {
    size_t i;
-   QString    path = hash["path"];
-   bool acceptDrop = false;
+   const QString &path = entry.path;
+   bool acceptDrop     = false;
 
    for (i = 0; i < 4; i++)
    {
@@ -3596,7 +3589,7 @@ void MainWindow::onCurrentItemChanged(const QHash<QString, QString> &hash)
    else
    {
       QString thumbnailsDir = m_playlistModel->getPlaylistThumbnailsDir(
-            hash["db_name"]);
+            entry.dbName);
 
       /* Clear any pending file-browser preview request: this code
        * path serves the playlist views, not the file browser, so a
@@ -3608,7 +3601,7 @@ void MainWindow::onCurrentItemChanged(const QHash<QString, QString> &hash)
          QString name = m_playlistModel->getSanitizedThumbnailName(
                thumbnailsDir + QString("/")
                + qt_thumbnail_subdirs[i] + QString("/"),
-               hash["label_noext"]);
+               entry.labelNoExt);
          m_thumbnailPixmaps[i] = new QPixmap(pixmapFromPathRA(name));
       }
 
@@ -3922,8 +3915,6 @@ void MainWindow::initContentTableWidget()
 
    if (!item)
       return;
-
-   m_currentGridHash.clear();
 
    if (m_currentGridWidget)
    {

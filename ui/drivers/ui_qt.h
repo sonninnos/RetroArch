@@ -191,7 +191,7 @@ class PlaylistModel : public QAbstractListModel
 public:
    enum Roles
    {
-      HASH = Qt::UserRole + 1,
+      ENTRY = Qt::UserRole + 1,
       THUMBNAIL
    };
 
@@ -222,14 +222,14 @@ private slots:
    void onImageLoaded(const QImage image, const QModelIndex &index, const QString &path);
 
 private:
-   QVector<QHash<QString, QString> > m_contents;
+   QVector<PlaylistEntry> m_contents;
    QCache<QString, QPixmap> m_cache;
    QSet<QString> m_pendingImages;
    QRegularExpression m_fileSanitizerRegex;
    ThumbnailType m_thumbnailType = THUMBNAIL_TYPE_BOXART;
    ThumbnailLoader *m_thumbnailLoader;
    QString getThumbnailPath(const QModelIndex &index, QString type) const;
-   QString getThumbnailPath(const QHash<QString, QString> &hash, QString type) const;
+   QString getThumbnailPath(const PlaylistEntry &entry, QString type) const;
    QString getCurrentTypeThumbnailPath(const QModelIndex &index) const;
    void getPlaylistItems(QString path);
 };
@@ -501,8 +501,8 @@ public:
    void addFilesToPlaylist(QStringList files);
    QString getCurrentPlaylistPath();
    QModelIndex getCurrentContentIndex();
-   QHash<QString, QString> getCurrentContentHash();
-   QHash<QString, QString> getFileContentHash(const QModelIndex &index);
+   PlaylistEntry getCurrentContentEntry();
+   PlaylistEntry getFileContentEntry(const QModelIndex &index);
    QString getSpecialPlaylistPath(SpecialPlaylist playlist);
    QVector<QPair<QString, QString> > getPlaylists();
    void setDefaultCustomProperties();
@@ -528,7 +528,7 @@ public slots:
    void onShowHiddenDockWidgetAction();
    void setCoreActions();
    void onRunClicked();
-   void loadContent(const QHash<QString, QString> &contentHash);
+   void loadContent(const PlaylistEntry &entry);
    void onStartCoreClicked();
    void onDropWidgetEnterPressed();
    void selectBrowserDir(QString path);
@@ -573,7 +573,7 @@ private slots:
    void onCurrentListItemChanged(QListWidgetItem *current, QListWidgetItem *previous);
    void onCurrentListItemDataChanged(QListWidgetItem *item);
    void onCurrentItemChanged(const QModelIndex &index);
-   void onCurrentItemChanged(const QHash<QString, QString> &hash);
+   void onCurrentItemChanged(const PlaylistEntry &entry);
    void onCurrentFileChanged(const QModelIndex &index);
    void onPreviewImageLoaded(const QImage image, const QModelIndex &index, const QString &path);
    void onSearchEnterPressed();
@@ -614,7 +614,7 @@ private slots:
 private:
    void setCurrentCoreLabel();
    void getPlaylistFiles();
-   bool updateCurrentPlaylistEntry(const QHash<QString, QString> &contentHash);
+   bool updateCurrentPlaylistEntry(const PlaylistEntry &entry);
    bool addDirectoryFilesToList(QProgressDialog *dialog, QStringList &list, QDir &dir, QStringList &extensions);
    void renamePlaylistItem(QListWidgetItem *item, QString newName);
    bool currentPlaylistIsSpecial();
@@ -692,7 +692,6 @@ private:
    ThumbnailType m_thumbnailType;
    QProgressBar *m_gridProgressBar;
    QWidget *m_gridProgressWidget;
-   QHash<QString, QString> m_currentGridHash;
    QPointer<ThumbnailWidget> m_currentGridWidget;
    int m_allPlaylistsListMaxCount;
    int m_allPlaylistsGridMaxCount;
