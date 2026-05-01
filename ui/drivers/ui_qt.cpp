@@ -1514,6 +1514,16 @@ MainWindow::MainWindow(QWidget *parent) :
 
    memset(m_thumbnailPixmaps, 0, sizeof(m_thumbnailPixmaps));
 
+   /* Background loader for the file-browser preview pane. Decoding
+    * happens off the UI thread; results arrive on the imageLoaded
+    * signal and are filtered by m_pendingPreviewPath so that rapid
+    * selection changes don't flicker stale images in. */
+   m_previewLoader = new ThumbnailLoader(this);
+   connect(m_previewLoader,
+         SIGNAL(imageLoaded(QImage,QModelIndex,QString)), this,
+         SLOT(onPreviewImageLoaded(QImage,QModelIndex,QString)));
+   m_previewLoader->start();
+
    /* Cancel all progress dialogs immediately since
     * they show as soon as they're constructed. */
    m_updateProgressDialog->cancel();
@@ -3526,15 +3536,33 @@ void MainWindow::onCurrentItemChanged(const QHash<QString, QString> &hash)
 
    if (m_playlistModel->isSupportedImage(path))
    {
-      /* use thumbnail widgets to show regular image files */
-      m_thumbnailPixmaps[0] = new QPixmap(pixmapFromPathRA(path));
-      for (i = 1; i < 4; i++)
-         m_thumbnailPixmaps[i] = new QPixmap(*m_thumbnailPixmaps[0]);
+      /* Use thumbnail widgets to show regular image files. These can
+       * be very large (multi-GiB ARGB32 bitmaps after decoding a
+       * high-resolution PNG), so do the decode on the loader thread
+       * and update the panes when it arrives. Until then the panes
+       * show blank, which also clears any image left from a previous
+       * selection. */
+      QPixmap blank;
+
+      m_pendingPreviewPath = path;
+
+      for (i = 0; i < 4; i++)
+         setThumbnail(qt_thumbnail_widget_names[i], blank, false);
+
+      m_previewLoader->request(QModelIndex(), path);
+
+      setCoreActions();
+      return;
    }
    else
    {
       QString thumbnailsDir = m_playlistModel->getPlaylistThumbnailsDir(
             hash["db_name"]);
+
+      /* Clear any pending file-browser preview request: this code
+       * path serves the playlist views, not the file browser, so a
+       * preview result arriving now would be unwanted. */
+      m_pendingPreviewPath = QString();
 
       for (i = 0; i < 4; i++)
       {
@@ -3555,6 +3583,35 @@ void MainWindow::onCurrentItemChanged(const QHash<QString, QString> &hash)
             *m_thumbnailPixmaps[i], acceptDrop);
 
    setCoreActions();
+}
+
+void MainWindow::onPreviewImageLoaded(const QImage image,
+      const QModelIndex & /* index */, const QString &path)
+{
+   size_t i;
+
+   /* Drop stale results: if the user moved selection while we were
+    * decoding, the path we just got back isn't what's currently
+    * showing. */
+   if (path != m_pendingPreviewPath)
+      return;
+   if (image.isNull())
+      return;
+
+   for (i = 0; i < 4; i++)
+   {
+      if (m_thumbnailPixmaps[i])
+         delete m_thumbnailPixmaps[i];
+      m_thumbnailPixmaps[i] = NULL;
+   }
+
+   m_thumbnailPixmaps[0] = new QPixmap(QPixmap::fromImage(image));
+   for (i = 1; i < 4; i++)
+      m_thumbnailPixmaps[i] = new QPixmap(*m_thumbnailPixmaps[0]);
+
+   for (i = 0; i < 4; i++)
+      setThumbnail(qt_thumbnail_widget_names[i],
+            *m_thumbnailPixmaps[i], false);
 }
 
 void MainWindow::setThumbnail(QString widgetName,

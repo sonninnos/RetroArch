@@ -583,6 +583,7 @@ private slots:
    void onCurrentItemChanged(const QModelIndex &index);
    void onCurrentItemChanged(const QHash<QString, QString> &hash);
    void onCurrentFileChanged(const QModelIndex &index);
+   void onPreviewImageLoaded(const QImage image, const QModelIndex &index, const QString &path);
    void onSearchEnterPressed();
    void onSearchLineEditEdited(const QString &text);
    void onContentItemDoubleClicked(const QModelIndex &index);
@@ -658,6 +659,14 @@ private:
    QTabWidget *m_browserAndPlaylistTabWidget;
    bool m_pendingRun;
    QPixmap *m_thumbnailPixmaps[4];
+   /* Background loader for the file-browser preview pane. The
+    * preview is decoded asynchronously so that selecting a large
+    * image in the file table does not block the UI thread on a
+    * full-resolution PNG decode. m_pendingPreviewPath is the path
+    * we last requested; results for any other path are stale and
+    * dropped on arrival. */
+   ThumbnailLoader *m_previewLoader;
+   QString m_pendingPreviewPath;
    QSettings *m_settings;
    ViewOptionsDialog *m_viewOptionsDialog;
    CoreInfoDialog *m_coreInfoDialog;
