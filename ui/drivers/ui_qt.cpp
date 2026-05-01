@@ -136,6 +136,45 @@ static QPixmap pixmapFromPathRA(const QString &path)
    return QPixmap(path);
 }
 
+/* Give btn a default action whose text comes from the localization
+ * tables, then size btn to fit. The action is parented to btn so
+ * Qt cleans it up automatically; the explicit parent is needed
+ * because QAction's default-NULL-parent overload only exists from
+ * Qt 5.7 onwards. */
+static void qt_button_set_action_label(QToolButton *btn,
+      enum msg_hash_enums label)
+{
+   btn->setDefaultAction(new QAction(msg_hash_to_str(label), btn));
+   btn->setFixedSize(btn->sizeHint());
+}
+
+/* Add dock to win in the area stored as the dock's "default_area"
+ * dynamic property. The property is set elsewhere with a
+ * Qt::DockWidgetArea value; this just unpacks and routes it.
+ * Wraps a static_cast<Qt::DockWidgetArea>(... toInt()) idiom that
+ * otherwise repeats verbatim at every dock-attach site. */
+static void qt_dock_add_to(QMainWindow *win, QDockWidget *dock)
+{
+   win->addDockWidget(static_cast<Qt::DockWidgetArea>(
+            dock->property("default_area").toInt()), dock);
+}
+
+/* Configure the four standard pieces of a QDockWidget in one call:
+ * the QObject name (for QSettings save/restore), the default
+ * docking area (read back later by qt_dock_add_to), the localized
+ * menu text shown in the View menu, and the widget the dock
+ * displays. Replaces a four-line setObjectName / setProperty /
+ * setProperty / setWidget block that recurs at every dock site. */
+static void qt_dock_configure(QDockWidget *dock,
+      const char *object_name, Qt::DockWidgetArea default_area,
+      enum msg_hash_enums menu_text, QWidget *widget)
+{
+   dock->setObjectName(object_name);
+   dock->setProperty("default_area", default_area);
+   dock->setProperty("menu_text", msg_hash_to_str(menu_text));
+   dock->setWidget(widget);
+}
+
 /* %1 is a placeholder for palette(highlight) or the equivalent chosen by the user */
 static const QString qt_theme_default_stylesheet = QString(R"(
    QPushButton[flat="true"] {
@@ -1503,25 +1542,8 @@ MainWindow::MainWindow(QWidget *parent) :
    settings_t                   *settings = config_get_ptr();
    const char *path_dir_playlist          = settings->paths.directory_playlist;
    const char *path_dir_assets            = settings->paths.directory_assets;
-   const char *path_dir_menu_content      = settings->paths.directory_menu_content;
    QDir playlistDir(path_dir_playlist);
    QString                      configDir = QFileInfo(path_get(RARCH_PATH_CONFIG)).dir().absolutePath();
-   QToolButton   *searchResetButton       = NULL;
-   QHBoxLayout   *zoomLayout              = new QHBoxLayout();
-   QLabel   *zoomLabel                    = new QLabel(msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_ZOOM), m_zoomWidget);
-   QPushButton   *thumbnailTypePushButton = new QPushButton(msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_MENU_VIEW_OPTIONS_THUMBNAIL_TYPE), m_zoomWidget);
-   QMenu               *thumbnailTypeMenu = new QMenu(thumbnailTypePushButton);
-   QAction     *thumbnailTypeBoxartAction = NULL;
-   QAction *thumbnailTypeScreenshotAction = NULL;
-   QAction *thumbnailTypeTitleAction      = NULL;
-   QAction *thumbnailTypeLogoAction       = NULL;
-   QPushButton *viewTypePushButton        = new QPushButton(msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_VIEW), m_zoomWidget);
-   QMenu                    *viewTypeMenu = new QMenu(viewTypePushButton);
-   QAction           *viewTypeIconsAction = NULL;
-   QAction            *viewTypeListAction = NULL;
-   QHBoxLayout        *gridProgressLayout = new QHBoxLayout();
-   QLabel              *gridProgressLabel = NULL;
-   QHBoxLayout          *gridFooterLayout = NULL;
 
    qRegisterMetaType<QPointer<ThumbnailWidget> >("ThumbnailWidget");
    qRegisterMetaType<retro_task_callback_t>("retro_task_callback_t");
@@ -1545,54 +1567,10 @@ MainWindow::MainWindow(QWidget *parent) :
    m_thumbnailPackDownloadProgressDialog->cancel();
    m_playlistThumbnailDownloadProgressDialog->cancel();
 
-   m_gridProgressWidget                   = new QWidget();
-   gridProgressLabel                      = new QLabel(
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_PROGRESS),
-         m_gridProgressWidget);
-
-   thumbnailTypePushButton->setObjectName("thumbnailTypePushButton");
-   thumbnailTypePushButton->setFlat(true);
-
-   thumbnailTypeBoxartAction              = thumbnailTypeMenu->addAction(
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_BOXART));
-   thumbnailTypeScreenshotAction          = thumbnailTypeMenu->addAction(
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_SCREENSHOT));
-   thumbnailTypeTitleAction               = thumbnailTypeMenu->addAction(
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_TITLE_SCREEN));
-   thumbnailTypeLogoAction               = thumbnailTypeMenu->addAction(
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_LOGO));
-
-   thumbnailTypePushButton->setMenu(thumbnailTypeMenu);
-
-   viewTypePushButton->setObjectName("viewTypePushButton");
-   viewTypePushButton->setFlat(true);
-
-   viewTypeIconsAction                    = viewTypeMenu->addAction(
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_VIEW_TYPE_ICONS));
-   viewTypeListAction                     = viewTypeMenu->addAction(
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_VIEW_TYPE_LIST));
-
-   viewTypePushButton->setMenu(viewTypeMenu);
-
-   gridProgressLabel->setObjectName("gridProgressLabel");
-
-   m_gridProgressBar                      = new QProgressBar(
-         m_gridProgressWidget);
-
-   m_gridProgressBar->setSizePolicy(QSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred));
-
-   zoomLabel->setObjectName("zoomLabel");
-
-   m_zoomSlider                           = new QSlider(
-         Qt::Horizontal, m_zoomWidget);
-
-   m_zoomSlider->setMinimum(0);
-   m_zoomSlider->setMaximum(100);
-   m_zoomSlider->setValue(50);
-   m_zoomSlider->setSizePolicy(QSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred));
-
-   m_lastZoomSliderValue = m_zoomSlider->value();
-
+   /* m_playlistViewsAndFooter holds the playlist/grid views on top
+    * and the footer toolbar (zoom, view-type, thumbnail-type) on
+    * the bottom. Set up its layout, add the views, then call
+    * setupPlaylistFooter() to build and attach the toolbar. */
    m_playlistViewsAndFooter->setLayout(new QVBoxLayout());
 
    m_gridView->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -1606,9 +1584,142 @@ MainWindow::MainWindow(QWidget *parent) :
    m_playlistViewsAndFooter->layout()->setAlignment(Qt::AlignCenter);
    m_playlistViewsAndFooter->layout()->setContentsMargins(0, 0, 0, 0);
 
+   setupPlaylistFooter();
+
+   setupModels();
+
+   m_logWidget->setObjectName("logWidget");
+
+   m_folderIcon     = QIcon(QString(path_dir_assets) + GENERIC_FOLDER_ICON);
+   m_defaultStyle   = QApplication::style();
+   m_defaultPalette = QApplication::palette();
+
+   /* ViewOptionsDialog needs m_settings set before it's constructed */
+   m_settings            = new QSettings(configDir
+         + QString("/retroarch_qt.cfg"), QSettings::IniFormat, this);
+   m_viewOptionsDialog   = new ViewOptionsDialog(this, 0);
+   m_playlistEntryDialog = new PlaylistEntryDialog(this, 0);
+
+   /* default NULL parameter for parent wasn't added until 5.7 */
+   qt_button_set_action_label(m_startCorePushButton, MENU_ENUM_LABEL_VALUE_START_CORE);
+   qt_button_set_action_label(m_runPushButton,       MENU_ENUM_LABEL_VALUE_RUN);
+   qt_button_set_action_label(m_stopPushButton,      MENU_ENUM_LABEL_VALUE_QT_STOP);
+   qt_button_set_action_label(m_coreInfoPushButton,  MENU_ENUM_LABEL_VALUE_QT_INFO);
+
+   setupFileSystemBrowser();
+
+   reloadPlaylists();
+
+   setupDockWidgets();
+
+   m_dirTree->setContextMenuPolicy(Qt::CustomContextMenu);
+   m_listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+
+   setupSignalConnections();
+
+   m_timer->start(TIMER_MSEC);
+
+   statusBar()->addPermanentWidget(m_statusLabel);
+
+   setCurrentCoreLabel();
+   setCoreActions();
+
+   /* Both of these are necessary to get the folder to scroll
+    * to the top of the view */
+   qApp->processEvents();
+   QTimer::singleShot(0, this, SLOT(onBrowserStartClicked()));
+
+   m_searchLineEdit->setFocus();
+   m_loadCoreWindow->setWindowModality(Qt::ApplicationModal);
+
+   m_statusMessageElapsedTimer.start();
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 6, 0))
+   resizeDocks(QList<QDockWidget*>() << m_searchDock,
+         QList<int>() << 1, Qt::Vertical);
+#endif
+}
+
+/* Build the footer toolbar - zoom slider, view-type and thumbnail-
+ * type push buttons, items count label, and the always-hidden grid
+ * progress widget - and attach it under the playlist views. Owns
+ * all its widget locals so they don't pollute the constructor.
+ * Mutates several MainWindow members (m_gridProgressWidget,
+ * m_gridProgressBar, m_zoomSlider, m_lastZoomSliderValue) and
+ * appends to m_playlistViewsAndFooter's layout, which the caller
+ * is expected to have created. */
+void MainWindow::setupPlaylistFooter()
+{
+   QHBoxLayout *zoomLayout              = new QHBoxLayout();
+   QLabel      *zoomLabel               = new QLabel(
+         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_ZOOM), m_zoomWidget);
+   QPushButton *thumbnailTypePushButton = new QPushButton(
+         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_MENU_VIEW_OPTIONS_THUMBNAIL_TYPE),
+         m_zoomWidget);
+   QMenu       *thumbnailTypeMenu       = new QMenu(thumbnailTypePushButton);
+   QPushButton *viewTypePushButton      = new QPushButton(
+         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_VIEW), m_zoomWidget);
+   QMenu       *viewTypeMenu            = new QMenu(viewTypePushButton);
+   QHBoxLayout *gridProgressLayout      = new QHBoxLayout();
+   QHBoxLayout *gridFooterLayout        = NULL;
+   QLabel      *gridProgressLabel       = NULL;
+
+   m_gridProgressWidget = new QWidget();
+   gridProgressLabel    = new QLabel(
+         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_PROGRESS),
+         m_gridProgressWidget);
+
+   thumbnailTypePushButton->setObjectName("thumbnailTypePushButton");
+   thumbnailTypePushButton->setFlat(true);
+
+   connect(thumbnailTypeMenu->addAction(
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_BOXART)),
+         SIGNAL(triggered()), this, SLOT(onBoxartThumbnailClicked()));
+   connect(thumbnailTypeMenu->addAction(
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_SCREENSHOT)),
+         SIGNAL(triggered()), this, SLOT(onScreenshotThumbnailClicked()));
+   connect(thumbnailTypeMenu->addAction(
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_TITLE_SCREEN)),
+         SIGNAL(triggered()), this, SLOT(onTitleThumbnailClicked()));
+   connect(thumbnailTypeMenu->addAction(
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_THUMBNAIL_LOGO)),
+         SIGNAL(triggered()), this, SLOT(onLogoThumbnailClicked()));
+
+   thumbnailTypePushButton->setMenu(thumbnailTypeMenu);
+
+   viewTypePushButton->setObjectName("viewTypePushButton");
+   viewTypePushButton->setFlat(true);
+
+   connect(viewTypeMenu->addAction(
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_VIEW_TYPE_ICONS)),
+         SIGNAL(triggered()), this, SLOT(onIconViewClicked()));
+   connect(viewTypeMenu->addAction(
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_VIEW_TYPE_LIST)),
+         SIGNAL(triggered()), this, SLOT(onListViewClicked()));
+
+   viewTypePushButton->setMenu(viewTypeMenu);
+
+   gridProgressLabel->setObjectName("gridProgressLabel");
+
+   m_gridProgressBar = new QProgressBar(m_gridProgressWidget);
+   m_gridProgressBar->setSizePolicy(
+         QSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred));
+
+   zoomLabel->setObjectName("zoomLabel");
+
+   m_zoomSlider = new QSlider(Qt::Horizontal, m_zoomWidget);
+   m_zoomSlider->setMinimum(0);
+   m_zoomSlider->setMaximum(100);
+   m_zoomSlider->setValue(50);
+   m_zoomSlider->setSizePolicy(
+         QSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred));
+
+   m_lastZoomSliderValue = m_zoomSlider->value();
+
    m_gridProgressWidget->setLayout(gridProgressLayout);
    gridProgressLayout->setContentsMargins(0, 0, 0, 0);
-   gridProgressLayout->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Preferred));
+   gridProgressLayout->addSpacerItem(new QSpacerItem(
+            0, 0, QSizePolicy::Expanding, QSizePolicy::Preferred));
    gridProgressLayout->addWidget(gridProgressLabel);
    gridProgressLayout->addWidget(m_gridProgressBar);
 
@@ -1623,18 +1734,27 @@ MainWindow::MainWindow(QWidget *parent) :
 
    gridFooterLayout = new QHBoxLayout();
    gridFooterLayout->addWidget(m_itemsCountLabel);
-   gridFooterLayout->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Preferred));
+   gridFooterLayout->addSpacerItem(new QSpacerItem(
+            0, 0, QSizePolicy::Expanding, QSizePolicy::Preferred));
    gridFooterLayout->addWidget(m_gridProgressWidget);
    gridFooterLayout->addWidget(m_zoomWidget);
    gridFooterLayout->addWidget(thumbnailTypePushButton);
    gridFooterLayout->addWidget(viewTypePushButton);
 
-   static_cast<QVBoxLayout*>(m_playlistViewsAndFooter->layout())->addLayout(gridFooterLayout);
+   static_cast<QVBoxLayout*>(m_playlistViewsAndFooter->layout())
+      ->addLayout(gridFooterLayout);
 
    m_gridProgressWidget->hide();
+}
 
-   m_playlistModel = new PlaylistModel(this);
-   m_proxyModel    = new QSortFilterProxyModel(this);
+/* Configure the playlist + filesystem proxy models and the table /
+ * file-table / grid views that consume them. The init list creates
+ * the views; this fills in their behaviour (sort, selection, etc.)
+ * and hooks them up to their models. */
+void MainWindow::setupModels()
+{
+   m_playlistModel  = new PlaylistModel(this);
+   m_proxyModel     = new QSortFilterProxyModel(this);
    m_proxyModel->setSourceModel(m_playlistModel);
    m_proxyModel->setSortCaseSensitivity(Qt::CaseInsensitive);
 
@@ -1648,7 +1768,8 @@ MainWindow::MainWindow(QWidget *parent) :
    m_tableView->verticalHeader()->setVisible(false);
    m_tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
    m_tableView->setSelectionMode(QAbstractItemView::SingleSelection);
-   m_tableView->setEditTriggers(QAbstractItemView::SelectedClicked | QAbstractItemView::EditKeyPressed);
+   m_tableView->setEditTriggers(
+         QAbstractItemView::SelectedClicked | QAbstractItemView::EditKeyPressed);
    m_tableView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
    m_tableView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
    m_tableView->horizontalHeader()->setStretchLastSection(true);
@@ -1667,57 +1788,24 @@ MainWindow::MainWindow(QWidget *parent) :
 
    m_gridView->setItemDelegate(new ThumbnailDelegate(m_gridItem, this));
    m_gridView->setModel(m_proxyModel);
-
    m_gridView->setSelectionModel(m_tableView->selectionModel());
+}
 
-   m_logWidget->setObjectName("logWidget");
+/* Configure the QFileSystemModels and the directory tree view used
+ * by the file browser. Sets entry filters (respecting the user's
+ * "show hidden files" preference), points both models at the root
+ * of the filesystem, and hides the size/type/date columns on the
+ * tree so only names are shown. */
+void MainWindow::setupFileSystemBrowser()
+{
+   const bool show_hidden = m_settings->value("show_hidden_files", true).toBool();
+   const QDir::Filters hidden_filters = show_hidden
+      ? (QDir::Hidden | QDir::System)
+      : static_cast<QDir::Filter>(0);
 
-   m_folderIcon     = QIcon(QString(path_dir_assets) + GENERIC_FOLDER_ICON);
-   m_defaultStyle   = QApplication::style();
-   m_defaultPalette = QApplication::palette();
-
-   /* ViewOptionsDialog needs m_settings set before it's constructed */
-   m_settings            = new QSettings(configDir
-         + QString("/retroarch_qt.cfg"), QSettings::IniFormat, this);
-   m_viewOptionsDialog   = new ViewOptionsDialog(this, 0);
-   m_playlistEntryDialog = new PlaylistEntryDialog(this, 0);
-
-   /* default NULL parameter for parent wasn't added until 5.7 */
-   m_startCorePushButton->setDefaultAction(new QAction(msg_hash_to_str(
-               MENU_ENUM_LABEL_VALUE_START_CORE), m_startCorePushButton));
-   m_startCorePushButton->setFixedSize(m_startCorePushButton->sizeHint());
-
-   m_runPushButton->setDefaultAction(new QAction(msg_hash_to_str(
-               MENU_ENUM_LABEL_VALUE_RUN), m_runPushButton));
-   m_runPushButton->setFixedSize(m_runPushButton->sizeHint());
-
-   m_stopPushButton->setDefaultAction(new QAction(msg_hash_to_str(
-               MENU_ENUM_LABEL_VALUE_QT_STOP), m_stopPushButton));
-   m_stopPushButton->setFixedSize(m_stopPushButton->sizeHint());
-
-   m_coreInfoPushButton->setDefaultAction(new QAction(msg_hash_to_str(
-               MENU_ENUM_LABEL_VALUE_QT_INFO), m_coreInfoPushButton));
-   m_coreInfoPushButton->setFixedSize(m_coreInfoPushButton->sizeHint());
-
-   searchResetButton = new QToolButton(m_searchWidget);
-   searchResetButton->setDefaultAction(new QAction(msg_hash_to_str(
-               MENU_ENUM_LABEL_VALUE_QT_MENU_SEARCH_CLEAR), searchResetButton));
-   searchResetButton->setFixedSize(searchResetButton->sizeHint());
-
-   connect(searchResetButton, SIGNAL(clicked()), this, SLOT(onSearchResetClicked()));
-
-   m_dirModel->setFilter(  QDir::NoDotAndDotDot
-                         | QDir::AllDirs
-                         | QDir::Drives
-                         | (m_settings->value("show_hidden_files", true).toBool()
-                          ? (QDir::Hidden | QDir::System)
-                          : static_cast<QDir::Filter>(0)));
-
-   m_fileModel->setFilter(  QDir::NoDot
-                          | QDir::AllEntries
-                          | (m_settings->value("show_hidden_files", true).toBool()
-                           ? (QDir::Hidden | QDir::System)
-                           : static_cast<QDir::Filter>(0)));
+   m_dirModel->setFilter(QDir::NoDotAndDotDot | QDir::AllDirs | QDir::Drives
+         | hidden_filters);
+   m_fileModel->setFilter(QDir::NoDot | QDir::AllEntries | hidden_filters);
 
 #if defined(Q_OS_WIN)
    m_dirModel->setRootPath("");
@@ -1739,60 +1827,66 @@ MainWindow::MainWindow(QWidget *parent) :
       m_dirTree->hideColumn(2);  /* type */
       m_dirTree->hideColumn(3);  /* date modified */
    }
+}
 
-   reloadPlaylists();
+/* Build the search / core-info / log dock widgets and their
+ * contents, register them with the main window, and hide the log
+ * dock so it stays out of the way until the user opens it. Pulled
+ * out of the constructor for readability. */
+void MainWindow::setupDockWidgets()
+{
+   QToolButton *searchResetButton = new QToolButton(m_searchWidget);
+   qt_button_set_action_label(searchResetButton,
+         MENU_ENUM_LABEL_VALUE_QT_MENU_SEARCH_CLEAR);
+   connect(searchResetButton, SIGNAL(clicked()), this,
+         SLOT(onSearchResetClicked()));
 
    m_searchWidget->setLayout(new QHBoxLayout());
    m_searchWidget->layout()->addWidget(m_searchLineEdit);
    m_searchWidget->layout()->addWidget(searchResetButton);
 
-   m_searchDock->setObjectName("searchDock");
-   m_searchDock->setProperty("default_area", Qt::LeftDockWidgetArea);
-   m_searchDock->setProperty("menu_text",
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_SEARCH));
-   m_searchDock->setWidget(m_searchWidget);
+   qt_dock_configure(m_searchDock, "searchDock", Qt::LeftDockWidgetArea,
+         MENU_ENUM_LABEL_VALUE_SEARCH, m_searchWidget);
    m_searchDock->setFixedHeight(m_searchDock->minimumSizeHint().height());
 
-   addDockWidget(static_cast<Qt::DockWidgetArea>(
-            m_searchDock->property("default_area").toInt()), m_searchDock);
+   qt_dock_add_to(this, m_searchDock);
 
    m_coreInfoLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
    m_coreInfoLabel->setTextFormat(Qt::RichText);
    m_coreInfoLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
    m_coreInfoLabel->setOpenExternalLinks(true);
 
-   m_coreInfoDock->setObjectName("coreInfoDock");
-   m_coreInfoDock->setProperty("default_area", Qt::RightDockWidgetArea);
-   m_coreInfoDock->setProperty("menu_text",
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_CORE_INFO));
-   m_coreInfoDock->setWidget(m_coreInfoWidget);
+   qt_dock_configure(m_coreInfoDock, "coreInfoDock", Qt::RightDockWidgetArea,
+         MENU_ENUM_LABEL_VALUE_QT_CORE_INFO, m_coreInfoWidget);
 
-   addDockWidget(static_cast<Qt::DockWidgetArea>(
-            m_coreInfoDock->property("default_area").toInt()), m_coreInfoDock);
+   qt_dock_add_to(this, m_coreInfoDock);
 
    m_logWidget->setLayout(new QVBoxLayout());
    m_logWidget->layout()->addWidget(m_logTextEdit);
    m_logWidget->layout()->setContentsMargins(0, 0, 0, 0);
 
-   m_logDock->setObjectName("logDock");
-   m_logDock->setProperty("default_area", Qt::BottomDockWidgetArea);
-   m_logDock->setProperty("menu_text", msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_LOG));
-   m_logDock->setWidget(m_logWidget);
+   qt_dock_configure(m_logDock, "logDock", Qt::BottomDockWidgetArea,
+         MENU_ENUM_LABEL_VALUE_QT_LOG, m_logWidget);
 
-   addDockWidget(static_cast<Qt::DockWidgetArea>(
-            m_logDock->property("default_area").toInt()), m_logDock);
+   qt_dock_add_to(this, m_logDock);
 
    /* Hide the log by default. If user has saved their dock positions
     * with the log visible, then this hide() call will be reversed
     * later by restoreState().
     *
     * FIXME: If user unchecks "save dock positions", the log will
-    * not be unhidden even if it was previously saved in the config.
-    */
+    * not be unhidden even if it was previously saved in the config. */
    m_logDock->hide();
+}
 
-   m_dirTree->setContextMenuPolicy(Qt::CustomContextMenu);
-   m_listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+/* Wire up signal/slot connections for the main window's child
+ * widgets and self-emitted signals. Pulled out of the constructor
+ * to keep that body readable. All connections operate on already-
+ * constructed members of MainWindow; no parameters needed. */
+void MainWindow::setupSignalConnections()
+{
+   settings_t *settings              = config_get_ptr();
+   const char *path_dir_menu_content = settings->paths.directory_menu_content;
 
    connect(m_searchLineEdit, SIGNAL(returnPressed()), this,
          SLOT(onSearchEnterPressed()));
@@ -1822,18 +1916,6 @@ MainWindow::MainWindow(QWidget *parent) :
          SLOT(onLaunchWithComboBoxIndexChanged(int)));
    connect(m_zoomSlider, SIGNAL(valueChanged(int)), this,
          SLOT(onZoomValueChanged(int)));
-   connect(thumbnailTypeBoxartAction, SIGNAL(triggered()), this,
-         SLOT(onBoxartThumbnailClicked()));
-   connect(thumbnailTypeScreenshotAction, SIGNAL(triggered()), this,
-         SLOT(onScreenshotThumbnailClicked()));
-   connect(thumbnailTypeTitleAction, SIGNAL(triggered()), this,
-         SLOT(onTitleThumbnailClicked()));
-   connect(thumbnailTypeLogoAction, SIGNAL(triggered()), this,
-         SLOT(onLogoThumbnailClicked()));
-   connect(viewTypeIconsAction, SIGNAL(triggered()), this,
-         SLOT(onIconViewClicked()));
-   connect(viewTypeListAction, SIGNAL(triggered()), this,
-         SLOT(onListViewClicked()));
    connect(m_dirModel, SIGNAL(directoryLoaded(const QString&)), this,
          SLOT(onFileSystemDirLoaded(const QString&)));
    connect(m_fileModel, SIGNAL(directoryLoaded(const QString&)), this,
@@ -1852,7 +1934,7 @@ MainWindow::MainWindow(QWidget *parent) :
    connect(m_playlistThumbnailDownloadProgressDialog, SIGNAL(canceled()),
          m_playlistThumbnailDownloadProgressDialog, SLOT(cancel()));
    connect(m_playlistThumbnailDownloadProgressDialog, SIGNAL(canceled()),
-         this,SLOT(onPlaylistThumbnailDownloadCanceled()));
+         this, SLOT(onPlaylistThumbnailDownloadCanceled()));
 
    connect(m_thumbnailDownloadProgressDialog, SIGNAL(canceled()),
          m_thumbnailDownloadProgressDialog, SLOT(cancel()));
@@ -1923,28 +2005,6 @@ MainWindow::MainWindow(QWidget *parent) :
                QString,retro_task_callback_t)), this,
          SLOT(onExtractArchive(QString,QString,QString,retro_task_callback_t)),
          Qt::QueuedConnection);
-
-   m_timer->start(TIMER_MSEC);
-
-   statusBar()->addPermanentWidget(m_statusLabel);
-
-   setCurrentCoreLabel();
-   setCoreActions();
-
-   /* Both of these are necessary to get the folder to scroll
-    * to the top of the view */
-   qApp->processEvents();
-   QTimer::singleShot(0, this, SLOT(onBrowserStartClicked()));
-
-   m_searchLineEdit->setFocus();
-   m_loadCoreWindow->setWindowModality(Qt::ApplicationModal);
-
-   m_statusMessageElapsedTimer.start();
-
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 6, 0))
-   resizeDocks(QList<QDockWidget*>() << m_searchDock,
-         QList<int>() << 1, Qt::Vertical);
-#endif
 }
 
 MainWindow::~MainWindow()
@@ -3036,7 +3096,6 @@ ViewOptionsDialog* MainWindow::viewOptionsDialog() {return m_viewOptionsDialog;}
 void MainWindow::setCoreActions()
 {
    QListWidgetItem *currentPlaylistItem = m_listWidget->currentItem();
-   ViewType                    viewType = getCurrentViewType();
    QHash<QString, QString>         hash = getCurrentContentHash();
    QString      currentPlaylistFileName = QString();
    rarch_system_info_t *sys_info        = &runloop_state_get_ptr()->system;
@@ -3414,8 +3473,7 @@ void MainWindow::onShowHiddenDockWidgetAction()
 
    if (!dock->isVisible())
    {
-      addDockWidget(static_cast<Qt::DockWidgetArea>(
-               dock->property("default_area").toInt()), dock);
+      qt_dock_add_to(this, dock);
       dock->setVisible(true);
       dock->setFloating(false);
    }
@@ -4787,15 +4845,12 @@ static QDockWidget *qt_companion_build_browser_dock(MainWindow *mainwindow)
 
    browserAndPlaylistTabDock = new QDockWidget(msg_hash_to_str(
             MENU_ENUM_LABEL_VALUE_QT_MENU_DOCK_CONTENT_BROWSER), mainwindow);
-   browserAndPlaylistTabDock->setObjectName("browserAndPlaylistTabDock");
-   browserAndPlaylistTabDock->setProperty("default_area", Qt::LeftDockWidgetArea);
-   browserAndPlaylistTabDock->setProperty("menu_text",
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_MENU_DOCK_CONTENT_BROWSER));
-   browserAndPlaylistTabDock->setWidget(browserAndPlaylistTabWidget);
+   qt_dock_configure(browserAndPlaylistTabDock,
+         "browserAndPlaylistTabDock", Qt::LeftDockWidgetArea,
+         MENU_ENUM_LABEL_VALUE_QT_MENU_DOCK_CONTENT_BROWSER,
+         browserAndPlaylistTabWidget);
 
-   mainwindow->addDockWidget(static_cast<Qt::DockWidgetArea>(
-            browserAndPlaylistTabDock->property("default_area").toInt()),
-         browserAndPlaylistTabDock);
+   qt_dock_add_to(mainwindow, browserAndPlaylistTabDock);
 
    browserButtonsHBoxLayout->addItem(new QSpacerItem(
             browserAndPlaylistTabWidget->tabBar()->width(),
@@ -4835,13 +4890,10 @@ static void qt_companion_build_thumbnail_docks(MainWindow *mainwindow)
                   SLOT(onThumbnailDropped(const QImage&, ThumbnailType)));
 
       docks[i] = new QDockWidget(msg_hash_to_str(labels[i]), mainwindow);
-      docks[i]->setObjectName(dock_obj_names[i]);
-      docks[i]->setProperty("default_area", Qt::RightDockWidgetArea);
-      docks[i]->setProperty("menu_text", msg_hash_to_str(labels[i]));
-      docks[i]->setWidget(tw);
+      qt_dock_configure(docks[i], dock_obj_names[i],
+            Qt::RightDockWidgetArea, labels[i], tw);
 
-      mainwindow->addDockWidget(static_cast<Qt::DockWidgetArea>(
-               docks[i]->property("default_area").toInt()), docks[i]);
+      qt_dock_add_to(mainwindow, docks[i]);
    }
 
    for (i = 1; i < 4; i++)
@@ -4893,15 +4945,12 @@ static void qt_companion_build_core_selection_dock(MainWindow *mainwindow,
 
    coreSelectionDock = new QDockWidget(msg_hash_to_str(
             MENU_ENUM_LABEL_VALUE_QT_CORE), mainwindow);
-   coreSelectionDock->setObjectName("coreSelectionDock");
-   coreSelectionDock->setProperty("default_area", Qt::LeftDockWidgetArea);
-   coreSelectionDock->setProperty("menu_text", msg_hash_to_str(
-            MENU_ENUM_LABEL_VALUE_QT_CORE));
-   coreSelectionDock->setWidget(coreSelectionWidget);
+   qt_dock_configure(coreSelectionDock, "coreSelectionDock",
+         Qt::LeftDockWidgetArea, MENU_ENUM_LABEL_VALUE_QT_CORE,
+         coreSelectionWidget);
    coreSelectionDock->setFixedHeight(coreSelectionDock->minimumSizeHint().height());
 
-   mainwindow->addDockWidget(static_cast<Qt::DockWidgetArea>(
-            coreSelectionDock->property("default_area").toInt()), coreSelectionDock);
+   qt_dock_add_to(mainwindow, coreSelectionDock);
 
    mainwindow->splitDockWidget(browserAndPlaylistTabDock, coreSelectionDock, Qt::Vertical);
 

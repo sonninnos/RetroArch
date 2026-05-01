@@ -25,7 +25,6 @@
 #include <QTableView>
 #include <QFrame>
 #include <QWidget>
-#include <QDialog>
 #include <QLabel>
 #include <QRegularExpression>
 #include <QPalette>
@@ -37,7 +36,6 @@
 #include <QElapsedTimer>
 #include <QTableWidget>
 #include <QVBoxLayout>
-#include <QStyledItemDelegate>
 #include <QCache>
 #include <QSortFilterProxyModel>
 #include <QDir>
@@ -640,6 +638,15 @@ private:
    void applySearch();
    void updateItemsCount();
    QString changeThumbnail(const QImage &image, QString type);
+   /* Constructor helpers - keep MainWindow::MainWindow readable by
+    * pulling self-contained chunks of setup out into their own
+    * methods. None take parameters; everything operates on already-
+    * initialised members. */
+   void setupPlaylistFooter();
+   void setupModels();
+   void setupFileSystemBrowser();
+   void setupDockWidgets();
+   void setupSignalConnections();
 
    PlaylistModel *m_playlistModel;
    QSortFilterProxyModel *m_proxyModel;

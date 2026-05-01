@@ -19,7 +19,6 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStyledItemDelegate>
-#include <QTabWidget>
 #include <QToolButton>
 
 #include <retro_common_api.h>
