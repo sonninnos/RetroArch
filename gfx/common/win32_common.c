@@ -1345,16 +1345,16 @@ static LRESULT wnd_proc_wm_gdi_create(HWND hwnd)
  * outside the rect with black to produce letterbox / pillarbox
  * bars.  Reads bmp_width / bmp_height for the source rect (the
  * DDB's actual size); when RGUI is alive bmp holds the menu image
- * at the menu's resolution while gdi->video_width still tracks
- * the core, so video_width is only the fallback. */
+ * at the menu's resolution while gdi->frame_width still tracks
+ * the core, so frame_width is only the fallback. */
 static void wnd_proc_gdi_paint(gdi_t *gdi)
 {
    int       vp_x   = gdi->vp.x;
    int       vp_y   = gdi->vp.y;
    unsigned  vp_w   = gdi->vp.width  ? gdi->vp.width  : gdi->screen_width;
    unsigned  vp_h   = gdi->vp.height ? gdi->vp.height : gdi->screen_height;
-   unsigned  src_w  = gdi->bmp_width  ? gdi->bmp_width  : gdi->video_width;
-   unsigned  src_h  = gdi->bmp_height ? gdi->bmp_height : gdi->video_height;
+   unsigned  src_w  = gdi->bmp_width  ? gdi->bmp_width  : gdi->frame_width;
+   unsigned  src_h  = gdi->bmp_height ? gdi->bmp_height : gdi->frame_height;
 
    /* Letterbox / pillarbox bars: paint the four areas outside the
     * viewport rect black before the StretchBlt.  We do this even

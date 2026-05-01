@@ -2171,8 +2171,8 @@ static void gdi_font_render_msg(
    else
    {
       dst_bmp = gdi->bmp;
-      width   = gdi->bmp_width  ? gdi->bmp_width  : gdi->video_width;
-      height  = gdi->bmp_height ? gdi->bmp_height : gdi->video_height;
+      width   = gdi->bmp_width  ? gdi->bmp_width  : gdi->frame_width;
+      height  = gdi->bmp_height ? gdi->bmp_height : gdi->frame_height;
    }
 
    if (!dst_bmp || !width || !height)
@@ -2474,16 +2474,16 @@ static void *gdi_init(const video_info_t *video,
    *input                               = NULL;
    *input_data                          = NULL;
 
-   gdi->video_width                     = video->width;
-   gdi->video_height                    = video->height;
+   gdi->frame_width                     = video->width;
+   gdi->frame_height                    = video->height;
    gdi->rgb32                           = video->rgb32;
 
-   gdi->video_bits                      = video->rgb32 ? 32 : 16;
+   gdi->frame_bits                      = video->rgb32 ? 32 : 16;
 
    if (video->rgb32)
-      gdi->video_pitch                  = video->width * 4;
+      gdi->frame_pitch                  = video->width * 4;
    else
-      gdi->video_pitch                  = video->width * 2;
+      gdi->frame_pitch                  = video->width * 2;
 
    /* Aspect-ratio handling.  Pulled from video_info_t at init the
     * same way d3d8/d3d9 do it; the user can override via the
@@ -2575,7 +2575,7 @@ static bool gdi_frame(void *data, const void *frame,
    unsigned height                  = 0;
    bool draw                        = true;
    gdi_t *gdi                       = (gdi_t*)data;
-   unsigned bits                    = gdi->video_bits;
+   unsigned bits                    = gdi->frame_bits;
    HWND hwnd                        = win32_get_window();
 #ifdef HAVE_MENU
    bool menu_is_alive               = (video_info->menu_st_flags & MENU_ST_FLAG_ALIVE)
@@ -2639,8 +2639,8 @@ static bool gdi_frame(void *data, const void *frame,
             gdi->winDC, frame_width, frame_height);
       gdi->bmp_width    = frame_width;
       gdi->bmp_height   = frame_height;
-      gdi->video_width  = frame_width;
-      gdi->video_height = frame_height;
+      gdi->frame_width  = frame_width;
+      gdi->frame_height = frame_height;
    }
 
    /* --- Step 2: figure out the on-screen surface size. */
@@ -2788,7 +2788,7 @@ static bool gdi_frame(void *data, const void *frame,
          && frame_height > 4)
    {
       gdi_upload_core_frame_to_menu(gdi, frame,
-            frame_width, frame_height, pitch, gdi->video_bits);
+            frame_width, frame_height, pitch, gdi->frame_bits);
    }
 #endif
 
@@ -2803,15 +2803,15 @@ static bool gdi_frame(void *data, const void *frame,
    /* --- Step 6: track core-frame size changes (needed for both the
     * RGUI-overlay path and the no-menu path).  We resize bmp here
     * if the core's announced dimensions changed. */
-   if (     (gdi->video_width  != frame_width)
-         || (gdi->video_height != frame_height)
-         || (gdi->video_pitch  != pitch))
+   if (     (gdi->frame_width  != frame_width)
+         || (gdi->frame_height != frame_height)
+         || (gdi->frame_pitch  != pitch))
    {
       if (frame_width > 4 && frame_height > 4)
       {
-         gdi->video_width  = frame_width;
-         gdi->video_height = frame_height;
-         gdi->video_pitch  = pitch;
+         gdi->frame_width  = frame_width;
+         gdi->frame_height = frame_height;
+         gdi->frame_pitch  = pitch;
       }
    }
 
@@ -2832,9 +2832,9 @@ static bool gdi_frame(void *data, const void *frame,
    else
 #endif
    {
-      width         = gdi->video_width;
-      height        = gdi->video_height;
-      pitch         = gdi->video_pitch;
+      width         = gdi->frame_width;
+      height        = gdi->frame_height;
+      pitch         = gdi->frame_pitch;
 
       if (  frame_width  == 4
          && frame_height == 4
@@ -2850,7 +2850,7 @@ static bool gdi_frame(void *data, const void *frame,
    /* --- Step 8: resize bmp if its current size doesn't match the
     * effective draw target size (width/height computed in Step 7).
     * We compare against bmp_width/bmp_height (the DDB's own size),
-    * NOT video_width — the latter holds the core's announced frame
+    * NOT frame_width — the latter holds the core's announced frame
     * size, which can legitimately differ from the menu's frame size
     * when RGUI is alive.  Conflating the two causes a destructive
     * recreate every frame as Steps 6 and 8 fight over the field. */

@@ -107,19 +107,18 @@ typedef struct gdi
    unsigned  scratch_rgui_w;
    unsigned  scratch_rgui_h;
 
-   unsigned video_width;
-   unsigned video_height;
+   unsigned frame_width;
+   unsigned frame_height;
    unsigned screen_width;
    unsigned screen_height;
    /* Surface (window) size last published via video_driver_set_size,
-    * tracked here so gdi_alive can read it without locking.  Distinct
-    * from video_width / video_height which is the core's frame size. */
+    * tracked here so gdi_alive can read it without locking. */
    unsigned full_width;
    unsigned full_height;
-   /* Actual size of gdi->bmp (the DDB).  Separate from video_width
+   /* Actual size of gdi->bmp (the DDB).  Separate from frame_width
     * because when RGUI is active we draw the menu (a different size
     * than the core) into bmp; without a dedicated tracker, the
-    * comparison against video_width would trigger a destructive
+    * comparison against frame_width would trigger a destructive
     * DeleteObject + CreateCompatibleBitmap on every frame, racing
     * with WM_PAINT and producing visible flicker. */
    unsigned bmp_width;
@@ -128,8 +127,8 @@ typedef struct gdi
    unsigned menu_width;
    unsigned menu_height;
    unsigned menu_pitch;
-   unsigned video_pitch;
-   unsigned video_bits;
+   unsigned frame_pitch;
+   unsigned frame_bits;
    unsigned menu_bits;
    int win_major;
    int win_minor;
