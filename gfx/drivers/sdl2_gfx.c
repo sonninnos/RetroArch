@@ -984,7 +984,7 @@ static bool sdl2_gfx_set_shader(void *data,
    return false;
 }
 
-#ifdef HAVE_GFX_WIDGETS
+#if defined(HAVE_GFX_WIDGETS) && SDL_VERSION_ATLEAST(2, 0, 18)
 static bool sdl2_gfx_widgets_enabled(void *data) { (void)data; return true; }
 #endif
 
