@@ -8084,7 +8084,6 @@ static void materialui_frame(void *data, video_frame_info_t *video_info)
    {
       size_t _len;
       char msg[NAME_MAX_LENGTH];
-      struct menu_state *menu_st  = menu_state_get_ptr();
       const char *str             = menu_input_dialog_get_buffer();
       const char *label           = menu_st->input_dialog_kb_label;
 
@@ -9812,7 +9811,6 @@ static void materialui_populate_entries(void *data, const char *path,
    mui->playlist = NULL;
    if (mui->flags & MUI_FLAG_IS_PLAYLIST)
    {
-      struct menu_state *menu_st = menu_state_get_ptr();
       menu_list_t *menu_list     = menu_st->entries.list;
       file_list_t *list          = menu_list ? MENU_LIST_GET_SELECTION(menu_list, 0) : NULL;
       size_t list_size           = list ? list->size : 0;
@@ -9856,25 +9854,25 @@ static void materialui_populate_entries(void *data, const char *path,
       if (     (remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_PLAYLISTS)
             && mui->playlist_selection_ptr < MUI_PLAYLIST_SELECTION_MAX)
-         menu_state_get_ptr()->selection_ptr = mui->playlist_selection[mui->playlist_selection_ptr];
+         menu_st->selection_ptr = mui->playlist_selection[mui->playlist_selection_ptr];
    }
    else if (mui->flags & MUI_FLAG_IS_PLAYLISTS_TAB)
    {
       if (     remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_PLAYLISTS)
-         menu_state_get_ptr()->selection_ptr = mui->playlist_selection_ptr;
+         menu_st->selection_ptr = mui->playlist_selection_ptr;
    }
    else if (string_is_equal(mui->menu_title, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_MAIN_MENU)))
    {
       if (     remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_MAIN)
-         menu_state_get_ptr()->selection_ptr = mui->mainmenu_selection_ptr;
+         menu_st->selection_ptr = mui->mainmenu_selection_ptr;
    }
    else if (string_is_equal(mui->menu_title, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_SETTINGS)))
    {
       if (     remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_MAIN)
-         menu_state_get_ptr()->selection_ptr = mui->settings_selection_ptr;
+         menu_st->selection_ptr = mui->settings_selection_ptr;
    }
 
    if (     settings->bools.savestate_thumbnail_enable
@@ -9883,7 +9881,7 @@ static void materialui_populate_entries(void *data, const char *path,
    {
       mui->flags |= MUI_FLAG_IS_SAVESTATE_LIST;
       materialui_update_savestate_thumbnail_path(mui,
-         (unsigned)menu_state_get_ptr()->selection_ptr);
+         (unsigned)menu_st->selection_ptr);
       materialui_update_savestate_thumbnail_image(mui);
    }
    else
@@ -10366,7 +10364,6 @@ static enum menu_action materialui_parse_menu_entry_action(
                materialui_auto_select_onscreen_entry(mui, MUI_ONSCREEN_ENTRY_CENTRE);
             else
             {
-               struct menu_state *menu_st = menu_state_get_ptr();
                size_t selection           = menu_st->selection_ptr;
 
                /* In all other cases, if current selection is off
@@ -10417,12 +10414,10 @@ static enum menu_action materialui_parse_menu_entry_action(
           *   'scan' action *if* current selection is
           *   on screen */
          {
-            struct menu_state *menu_st = menu_state_get_ptr();
             size_t selection           = menu_st->selection_ptr;
 
             if (mui->flags & MUI_FLAG_IS_PLAYLISTS_TAB)
             {
-               struct menu_state *menu_st = menu_state_get_ptr();
                size_t selection_total     = menu_st->entries.list ? MENU_LIST_GET_SELECTION(menu_st->entries.list, 0)->size : 0;
                size_t selection           = menu_st->selection_ptr;
                size_t new_selection       = random_range(0, (unsigned)(selection_total - 1));
@@ -10496,7 +10491,6 @@ static enum menu_action materialui_parse_menu_entry_action(
           *   'start' action *if* current selection is
           *   on screen */
          {
-            struct menu_state *menu_st = menu_state_get_ptr();
             size_t selection           = menu_st->selection_ptr;
 
             if (     (mui->flags & MUI_FLAG_IS_PLAYLIST)
@@ -10545,7 +10539,6 @@ static enum menu_action materialui_parse_menu_entry_action(
           * In addition, an 'info' action is only valid in general
           * if the currently selected entry is on screen */
          {
-            struct menu_state *menu_st = menu_state_get_ptr();
             size_t selection           = menu_st->selection_ptr;
 
             /* - If this is a playlist, 'info' command is used
@@ -10574,7 +10567,6 @@ static enum menu_action materialui_parse_menu_entry_action(
           *   selected item is on screen. If it
           *   is off screen, must disable input */
          {
-            struct menu_state *menu_st = menu_state_get_ptr();
             size_t selection           = menu_st->selection_ptr;
 
             if (!materialui_entry_onscreen(mui, selection))
@@ -11123,7 +11115,6 @@ static int materialui_pointer_up(void *userdata,
             {
                int entry_x;
                int entry_y;
-               struct menu_state   *menu_st = menu_state_get_ptr();
                menu_list_t *menu_list       = menu_st->entries.list;
                file_list_t *list            = NULL;
                materialui_node_t *node      = NULL;

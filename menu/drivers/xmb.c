@@ -6118,7 +6118,6 @@ static enum menu_action xmb_parse_menu_entry_action(
       case MENU_ACTION_SCAN:
          if (xmb->is_playlist_tab)
          {
-            struct menu_state *menu_st = menu_state_get_ptr();
             size_t selection_total     = menu_st->entries.list ? MENU_LIST_GET_SELECTION(menu_st->entries.list, 0)->size : 0;
             size_t selection           = menu_st->selection_ptr;
             size_t new_selection       = random_range(0, (unsigned)(selection_total - 1));
@@ -7148,7 +7147,6 @@ static void xmb_render(void *data,
                   /* If category changed, do full switch */
                   if (nearest != xmb->categories_selection_ptr)
                   {
-                     struct menu_state *menu_st = menu_state_get_ptr();
                      menu_list_t *menu_list     = menu_st->entries.list;
                      file_list_t *selection_buf = MENU_LIST_GET_SELECTION(menu_list, 0);
 
@@ -7173,7 +7171,6 @@ static void xmb_render(void *data,
          else if (xmb->drag_mode == XMB_DRAG_VERTICAL)
          {
             /* Apply vertical drag to list selection */
-            struct menu_state *menu_st = menu_state_get_ptr();
             menu_list_t *menu_list     = menu_st->entries.list;
             size_t list_size           = MENU_LIST_GET_SELECTION(menu_list, 0)->size;
 

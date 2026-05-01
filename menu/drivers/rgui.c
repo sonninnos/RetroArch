@@ -5312,7 +5312,6 @@ static void rgui_render(void *data, unsigned width, unsigned height,
       char thumbnail_title_buf[NAME_MAX_LENGTH];
       unsigned title_x, title_width;
       const char *thumbnail_title = NULL;
-      struct menu_state *menu_st  = menu_state_get_ptr();
       bool is_state_slot          = *rgui->savestate_thumbnail_file_path;
       thumbnail_title_buf[0]      = '\0';
 
@@ -7444,6 +7443,7 @@ static void rgui_populate_entries(
 {
    rgui_t *rgui                  = (rgui_t*)data;
    settings_t *settings          = config_get_ptr();
+   struct menu_state *menu_st    = menu_state_get_ptr();
 #if defined(DINGUX)
    unsigned aspect_ratio_lock    = RGUI_ASPECT_RATIO_LOCK_NONE;
 #else
@@ -7551,19 +7551,19 @@ static void rgui_populate_entries(
    {
       if (     remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_PLAYLISTS)
-         menu_state_get_ptr()->selection_ptr = rgui->playlist_selection[rgui->playlist_selection_ptr];
+         menu_st->selection_ptr = rgui->playlist_selection[rgui->playlist_selection_ptr];
    }
    else if (rgui->flags & RGUI_FLAG_IS_PLAYLISTS_TAB)
    {
       if (     remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_PLAYLISTS)
-         menu_state_get_ptr()->selection_ptr = rgui->playlist_selection_ptr;
+         menu_st->selection_ptr = rgui->playlist_selection_ptr;
    }
    else if (string_is_equal(label, MENU_ENUM_LABEL_SETTINGS_STR))
    {
       if (     remember_selection == MENU_REMEMBER_SELECTION_ALWAYS
             || remember_selection == MENU_REMEMBER_SELECTION_MAIN)
-         menu_state_get_ptr()->selection_ptr = rgui->settings_selection_ptr;
+         menu_st->selection_ptr = rgui->settings_selection_ptr;
    }
 
    rgui_navigation_set(data, true);
@@ -7694,8 +7694,6 @@ static int rgui_pointer_up(
                   return rgui_menu_entry_action(rgui, entry, selection, MENU_ACTION_CANCEL);
                else if (ptr <= (end - 1))
                {
-                  struct menu_state *menu_st = menu_state_get_ptr();
-
                   /* Perform 'select' on the pointed item */
                   menu_st->selection_ptr = ptr;
                   rgui_navigation_set(rgui, false);
