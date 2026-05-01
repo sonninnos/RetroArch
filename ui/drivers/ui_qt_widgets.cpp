@@ -32,19 +32,12 @@
 #include "ui_qt_widgets.h"
 #include "ui_qt.h"
 
-#ifndef CXX_BUILD
-extern "C" {
-#endif
-
-#include <math.h>
-
-#include <retro_miscellaneous.h>
-#include <string/stdstring.h>
-#include <streams/file_stream.h>
-#include <file/file_path.h>
-#include <file/archive_file.h>
-#include <lists/string_list.h>
-
+/* RetroArch-internal headers are included here, OUTSIDE the extern "C"
+ * block below.  They self-guard their C declarations with
+ * RETRO_BEGIN_DECLS / RETRO_END_DECLS, and several of them transitively
+ * include libretro-common/include/retro_atomic.h, which in C++ mode
+ * pulls in the C++ <atomic> header.  Templates inside extern "C" are a
+ * hard error, so these must live outside the extern "C" block. */
 #include "../../config.def.h"
 #include "../../command.h"
 #include "../../core_info.h"
@@ -69,6 +62,19 @@ extern "C" {
 #include "../../menu/menu_shader.h"
 #endif
 #endif
+
+#ifndef CXX_BUILD
+extern "C" {
+#endif
+
+#include <math.h>
+
+#include <retro_miscellaneous.h>
+#include <string/stdstring.h>
+#include <streams/file_stream.h>
+#include <file/file_path.h>
+#include <file/archive_file.h>
+#include <lists/string_list.h>
 
 #ifndef CXX_BUILD
 }
