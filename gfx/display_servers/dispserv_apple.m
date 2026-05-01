@@ -556,9 +556,9 @@ static void *apple_display_server_init(void)
          && settings->floats.video_refresh_rate >= 10.0f
          && settings->floats.video_refresh_rate <= 250.0f)
       {
-         float hz = settings->floats.video_refresh_rate;
-         CocoaView *view = [CocoaView get];
 #if defined(IOS)
+         float hz        = settings->floats.video_refresh_rate;
+         CocoaView *view = [CocoaView get];
          if (view && view.displayLink)
          {
             RARCH_DBG("[Video] Setting initial refresh rate to %.3f Hz\n", hz);
@@ -571,6 +571,8 @@ static void *apple_display_server_init(void)
                view.displayLink.preferredFramesPerSecond = hz;
          }
 #elif defined(OSX) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 140000
+         float hz        = settings->floats.video_refresh_rate;
+         CocoaView *view = [CocoaView get];
          if (view)
          {
             if (@available(macOS 14, *))
