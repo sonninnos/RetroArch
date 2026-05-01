@@ -7458,7 +7458,7 @@ static void ozone_draw_messagebox(
       unsigned slice_new_w  = longest_width + (slice_margin * 2);
       unsigned slice_new_h  = line_height * (line_count + 2) + (slice_margin / 2);
       unsigned slice_w      = 256;
-      int slice_x           = x - (longest_width / 2) - slice_margin;
+      int slice_x           = (int)(x - (longest_width / 2) - slice_margin);
       int slice_y           = y - line_height - (slice_margin / 4)
             + ((slice_new_h >= slice_w)
                   ? (16.0f * scale_factor)

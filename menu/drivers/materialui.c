@@ -10784,7 +10784,6 @@ static int materialui_pointer_down(void *userdata,
       int drag_margin_vert;
       gfx_display_t *p_disp  = disp_get_ptr();
       unsigned header_height = p_disp->header_height;
-      unsigned width         = mui->last_width;
       unsigned height        = mui->last_height;
 
       /* Check whether pointer down event is within

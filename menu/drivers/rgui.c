@@ -2972,7 +2972,7 @@ static void rgui_render_mini_thumbnail(
       else
          fb_y_offset = (rgui->term_layout.start_y + term_height) - thumbnail->max_height;
 
-      text_x         = (thumbnail->max_width  / 2) + fb_x_offset - (strlen(msg) * (rgui->font_width_stride / 2));
+      text_x         = (thumbnail->max_width  / 2) + fb_x_offset - ((int)strlen(msg) * (rgui->font_width_stride / 2));
       text_y         = (thumbnail->max_height / 2) + fb_y_offset - (rgui->font_height_stride / 3);
 
       /* Draw background */
@@ -5543,9 +5543,9 @@ static void rgui_render(void *data, unsigned width, unsigned height,
 
          rgui_blit_line(rgui,
                fb_width,
-               term_end_x
+               (int)(term_end_x
                      - (powerstate_len * rgui->font_width_stride)
-                     - (timedate_len * rgui->font_width_stride),
+                     - (timedate_len * rgui->font_width_stride)),
                title_y,
                timedate,
                rgui->colors.hover_color,

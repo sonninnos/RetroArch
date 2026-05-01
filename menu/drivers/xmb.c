@@ -2549,7 +2549,7 @@ static void xmb_set_title(xmb_handle_t *xmb)
             if (xmb->categories_selection_ptr > xmb->system_tab_end)
             {
                xmb_node_t *sidebar_node = NULL;
-               int i = xmb->categories_selection_ptr - xmb->system_tab_end - 1;
+               size_t i = xmb->categories_selection_ptr - xmb->system_tab_end - 1;
 
                /* Explore views */
                if (string_ends_with_size(xmb->horizontal_list.list[i].label, ".lvw",
