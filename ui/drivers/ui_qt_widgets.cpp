@@ -8024,13 +8024,8 @@ void MainWindow::onPlaylistWidgetContextMenuRequested(const QPoint&)
    for (j = 0; j < m_listWidget->count(); j++)
    {
       QListWidgetItem *item = m_listWidget->item(j);
-#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
-      bool           hidden = item->isHidden();
-#else
-      bool           hidden = m_listWidget->isItemHidden(item);
-#endif
 
-      if (hidden)
+      if (item->isHidden())
       {
          QAction *action = hiddenPlaylistsMenu->addAction(item->text());
          action->setProperty("row", j);

@@ -1540,9 +1540,7 @@ MainWindow::MainWindow(QWidget *parent) :
    ,m_itemsCountLabel(new QLabel(this))
 {
    settings_t                   *settings = config_get_ptr();
-   const char *path_dir_playlist          = settings->paths.directory_playlist;
    const char *path_dir_assets            = settings->paths.directory_assets;
-   QDir playlistDir(path_dir_playlist);
    QString                      configDir = QFileInfo(path_get(RARCH_PATH_CONFIG)).dir().absolutePath();
 
    qRegisterMetaType<QPointer<ThumbnailWidget> >("ThumbnailWidget");
@@ -2202,6 +2200,11 @@ const QString& MainWindow::customThemeString() const
 
 bool MainWindow::setCustomThemeFile(QString filePath)
 {
+   QByteArray pathArray;
+   const char *path_data;
+   void   *buf  = NULL;
+   int64_t len  = 0;
+
    if (filePath.isEmpty())
    {
       QMessageBox::critical(this,
@@ -2210,38 +2213,10 @@ bool MainWindow::setCustomThemeFile(QString filePath)
       return false;
    }
 
-   QFile file(filePath);
+   pathArray = filePath.toUtf8();
+   path_data = pathArray.constData();
 
-   if (file.exists())
-   {
-      bool opened = file.open(QIODevice::ReadOnly);
-
-      if (!opened)
-      {
-         QMessageBox::critical(this,
-               msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_CUSTOM_THEME),
-               msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_FILE_READ_OPEN_FAILED));
-         return false;
-      }
-
-      {
-         QByteArray fileArray = file.readAll();
-         QString fileStr      = QString::fromUtf8(fileArray);
-
-         file.close();
-
-         if (fileStr.isEmpty())
-         {
-            QMessageBox::critical(this,
-                  msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_CUSTOM_THEME),
-                  msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_FILE_IS_EMPTY));
-            return false;
-         }
-
-         setCustomThemeString(fileStr);
-      }
-   }
-   else
+   if (!filestream_exists(path_data))
    {
       QMessageBox::critical(this,
             msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_CUSTOM_THEME),
@@ -2249,6 +2224,26 @@ bool MainWindow::setCustomThemeFile(QString filePath)
       return false;
    }
 
+   if (!filestream_read_file(path_data, &buf, &len))
+   {
+      QMessageBox::critical(this,
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_CUSTOM_THEME),
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_FILE_READ_OPEN_FAILED));
+      return false;
+   }
+
+   if (len <= 0)
+   {
+      free(buf);
+      QMessageBox::critical(this,
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_CUSTOM_THEME),
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_QT_FILE_IS_EMPTY));
+      return false;
+   }
+
+   setCustomThemeString(QString::fromUtf8(static_cast<const char*>(buf),
+            static_cast<int>(len)));
+   free(buf);
    return true;
 }
 
@@ -2327,28 +2322,24 @@ bool MainWindow::showMessageBox(QString msg, MessageBoxType msgType,
 void MainWindow::onFileBrowserTreeContextMenuRequested(const QPoint&)
 {
 #ifdef HAVE_LIBRETRODB
-   QDir dir;
-   QByteArray dirArray;
    QPointer<QAction> action;
    QList<QAction*> actions;
    QScopedPointer<QAction> scanAction;
    QString currentDirString      = QDir::toNativeSeparators(
          m_dirModel->filePath(m_dirTree->currentIndex()));
    settings_t *settings          = config_get_ptr();
-   const char *fullpath          = NULL;
    const char *path_dir_playlist = settings->paths.directory_playlist;
    const char *path_content_db   = settings->paths.path_content_database;
+   QByteArray dirArray;
+   const char *fullpath          = NULL;
 
    if (currentDirString.isEmpty())
       return;
 
-#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
-   dir.setPath(currentDirString);
-#else
-   dir = currentDirString;
-#endif
+   dirArray = currentDirString.toUtf8();
+   fullpath = dirArray.constData();
 
-   if (!dir.exists())
+   if (!path_is_directory(fullpath))
       return;
 
    /* Default NULL parameter for parent wasn't added until 5.7 */
@@ -2359,9 +2350,6 @@ void MainWindow::onFileBrowserTreeContextMenuRequested(const QPoint&)
 
    if (!(action = QMenu::exec(actions, QCursor::pos(), NULL, m_dirTree)))
       return;
-
-   dirArray = currentDirString.toUtf8();
-   fullpath = dirArray.constData();
 
    task_push_dbscan(
          path_dir_playlist,
@@ -5426,22 +5414,13 @@ void LoadCoreWindow::loadCore(const char *path)
 
 void LoadCoreWindow::onCoreEnterPressed()
 {
-   QByteArray pathArray;
-   const char               *pathData = NULL;
    QTableWidgetItem *selectedCoreItem =
       m_table->item(m_table->currentRow(), CORE_NAME_COLUMN);
    QVariantHash                  hash = selectedCoreItem->data(
          Qt::UserRole).toHash();
    QString                       path = hash["path"].toString();
 
-#if (QT_VERSION > QT_VERSION_CHECK(6, 0, 0))
-   pathArray.append(path.toStdString());
-#else
-   pathArray.append(path);
-#endif
-   pathData                           = pathArray.constData();
-
-   loadCore(pathData);
+   loadCore(path.toUtf8().constData());
 }
 
 void LoadCoreWindow::onLoadCustomCoreClicked()
