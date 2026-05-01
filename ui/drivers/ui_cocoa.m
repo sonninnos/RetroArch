@@ -46,7 +46,13 @@
 #include <IOKit/hidsystem/IOLLEvent.h>
 
 #if defined(HAVE_COCOA_METAL)
-#include "../../gfx/common/metal_common.h"
+/* MetalView is the MTKView subclass owned by the Metal driver
+ * (gfx/drivers/metal.m).  This UI file only needs to instantiate it as
+ * the render view; the full class lives in metal.m.  Declared inline
+ * here to avoid pulling in the entire Metal driver header surface. */
+#import <MetalKit/MetalKit.h>
+@interface MetalView : MTKView
+@end
 #endif
 
 #include "../ui_companion_driver.h"
