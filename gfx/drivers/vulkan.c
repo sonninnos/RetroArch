@@ -6744,6 +6744,7 @@ static bool vulkan_frame(void *data, const void *frame,
       if ((vk->context->flags & VK_CTX_FLAG_HDR_ENABLE) &&
           ((vk->flags & VK_FLAG_MENU_ENABLE) || (vk->flags & VK_FLAG_OVERLAY_ENABLE)
          || message_visible
+         || statistics_show
 #ifdef HAVE_GFX_WIDGETS       
          || widgets_visible
 #endif
@@ -6858,6 +6859,7 @@ static bool vulkan_frame(void *data, const void *frame,
       if ((vk->context->flags & VK_CTX_FLAG_HDR_ENABLE) &&
           ((vk->flags & VK_FLAG_MENU_ENABLE) || (vk->flags & VK_FLAG_OVERLAY_ENABLE)
          || message_visible
+         || statistics_show
 #ifdef HAVE_GFX_WIDGETS       
          || widgets_visible
 #endif
