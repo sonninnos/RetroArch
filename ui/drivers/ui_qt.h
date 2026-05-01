@@ -386,6 +386,16 @@ class FileSystemProxyModel : public QSortFilterProxyModel
 protected:
    virtual bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const;
    void sort(int column, Qt::SortOrder order = Qt::AscendingOrder);
+private:
+   /* Cache for filterAcceptsRow's "is this row a child of the
+    * source model's current root?" check. The QFileSystemModel
+    * root path rarely changes, but filterAcceptsRow can fire
+    * thousands of times per directory load / sort / filter, and
+    * resolving rootPath() to a QModelIndex via sm->index(...)
+    * is not free. Compare the cached path string against the
+    * current one on each call; refresh both members on mismatch. */
+   mutable QString m_cachedRootPath;
+   mutable QModelIndex m_cachedRootIndex;
 };
 
 class LoadCoreTableWidget : public QTableWidget

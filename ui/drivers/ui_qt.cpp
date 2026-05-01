@@ -1386,12 +1386,26 @@ void LogTextEdit::appendMessage(const QString& text)
 }
 
 /* Only accept indexes from current path.
- * https://www.qtcentre.org/threads/50700-QFileSystemModel-and-QSortFilterProxyModel-don-t-work-well-together */
+ * https://www.qtcentre.org/threads/50700-QFileSystemModel-and-QSortFilterProxyModel-don-t-work-well-together
+ *
+ * The root index is cached because this method is invoked once per
+ * (row, parent) pair the proxy considers - which can be tens of
+ * thousands per directory load on a populous tree - while the
+ * QFileSystemModel root path changes only when the user navigates.
+ * Resolving the root path to an index via sm->index(...) walks the
+ * model on every call without the cache. */
 bool FileSystemProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
-   QFileSystemModel  *sm = qobject_cast<QFileSystemModel*>(sourceModel());
-   QModelIndex rootIndex = sm->index(sm->rootPath());
-   if (sourceParent == rootIndex)
+   QFileSystemModel *sm     = qobject_cast<QFileSystemModel*>(sourceModel());
+   const QString currentRoot = sm->rootPath();
+
+   if (currentRoot != m_cachedRootPath)
+   {
+      m_cachedRootPath  = currentRoot;
+      m_cachedRootIndex = sm->index(currentRoot);
+   }
+
+   if (sourceParent == m_cachedRootIndex)
       return QSortFilterProxyModel::filterAcceptsRow(sourceRow, sourceParent);
    return true;
 }
