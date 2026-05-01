@@ -437,7 +437,7 @@ typedef NS_ENUM(NSInteger, ViewDrawState)
 { \
    NSObject * __y = y; \
    if (x != nil) { \
-      NSObject * __foo = (__bridge_transfer NSObject *)(__bridge void *)(x); \
+      __attribute__((unused)) NSObject * __foo = (__bridge_transfer NSObject *)(__bridge void *)(x); \
       __foo = nil; \
       x = (__bridge __typeof__(x))nil; \
    } \
@@ -5624,7 +5624,7 @@ static bool metal_set_shader(void *data,
 
 static void metal_free(void *data)
 {
-   MetalDriver *md = (__bridge_transfer MetalDriver *)data;
+   __attribute__((unused)) MetalDriver *md = (__bridge_transfer MetalDriver *)data;
    metal_ctx_data = NULL;
    md = nil;
 }
@@ -5742,7 +5742,7 @@ static void metal_unload_texture(void *data,
     * buffer is still using it -- the Metal runtime refcounts
     * resources across CPU and GPU.  No cross-thread
     * serialisation needed for unload. */
-   Texture *t = (__bridge_transfer Texture *)(void *)handle;
+   __attribute__((unused)) Texture *t = (__bridge_transfer Texture *)(void *)handle;
    t = nil;
 }
 
