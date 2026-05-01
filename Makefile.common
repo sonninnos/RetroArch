@@ -2695,7 +2695,8 @@ ifeq ($(HAVE_STATIC_VIDEO_FILTERS), 1)
           gfx/video_filters/dedither.o \
           gfx/video_filters/pixel_art_aa.o \
           gfx/video_filters/crop_borders.o \
-          gfx/video_filters/ntsc.o
+          gfx/video_filters/ntsc.o \
+          gfx/video_filters/ntsc_crt.o
 endif
 
 ifeq ($(WANT_IOSUHAX), 1)
