@@ -484,7 +484,7 @@ public:
    Theme theme();
    Theme getThemeFromString(QString themeString);
    QString getThemeString(Theme theme);
-   QHash<QString, QString> getSelectedCore();
+   QString getSelectedCorePath();
    void showStatusMessage(QString msg, unsigned priority, unsigned duration, bool flush);
    bool showMessageBox(QString msg, MessageBoxType msgType = MSGBOX_TYPE_INFO, Qt::WindowModality modality = Qt::ApplicationModal, bool showDontAsk = true, bool *dontAsk = NULL);
    bool setCustomThemeFile(QString filePath);
@@ -508,15 +508,10 @@ public:
    QHash<QString, QString> getFileContentHash(const QModelIndex &index);
    QString getSpecialPlaylistPath(SpecialPlaylist playlist);
    QVector<QPair<QString, QString> > getPlaylists();
-   QString getScrubbedString(QString str);
    void setDefaultCustomProperties();
    void setIconViewZoom(int zoomValue);
 
 signals:
-   void thumbnailChanged(const QPixmap &pixmap);
-   void thumbnail2Changed(const QPixmap &pixmap);
-   void thumbnail3Changed(const QPixmap &pixmap);
-   void thumbnail4Changed(const QPixmap &pixmap);
    void gotLogMessage(const QString &msg);
    void gotStatusMessage(QString msg, unsigned priority, unsigned duration, bool flush);
    void gotReloadPlaylists();
@@ -546,10 +541,6 @@ public slots:
    void onDropWidgetEnterPressed();
    void selectBrowserDir(QString path);
    void setThumbnail(QString widgetName, QPixmap &pixmap, bool acceptDrop);
-   void onResizeThumbnailOne(QPixmap &pixmap, bool acceptDrop);
-   void onResizeThumbnailTwo(QPixmap &pixmap, bool acceptDrop);
-   void onResizeThumbnailThree(QPixmap &pixmap, bool acceptDrop);
-   void onResizeThumbnailFour(QPixmap &pixmap, bool acceptDrop);
    void appendLogMessage(const QString &msg);
    void onGotLogMessage(const QString &msg);
    void onGotStatusMessage(QString msg, unsigned priority, unsigned duration, bool flush);
@@ -666,10 +657,7 @@ private:
    QToolButton *m_stopPushButton;
    QTabWidget *m_browserAndPlaylistTabWidget;
    bool m_pendingRun;
-   QPixmap *m_thumbnailPixmap;
-   QPixmap *m_thumbnailPixmap2;
-   QPixmap *m_thumbnailPixmap3;
-   QPixmap *m_thumbnailPixmap4;
+   QPixmap *m_thumbnailPixmaps[4];
    QSettings *m_settings;
    ViewOptionsDialog *m_viewOptionsDialog;
    CoreInfoDialog *m_coreInfoDialog;
@@ -753,8 +741,6 @@ typedef struct ui_window_qt
 {
    MainWindow *qtWindow;
 } ui_window_qt_t;
-
-QStringList string_split_to_qt(QString str, char delim);
 
 RETRO_END_DECLS
 

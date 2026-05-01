@@ -109,6 +109,18 @@ static inline QString sanitize_ampersand(QString input)
    return input.replace("&", "&&");
 }
 
+/* Replace characters unsafe in URLs / file names with '_' */
+static QString scrub_qstring(QString str)
+{
+   static const char chars[] = "&*/:`\"<>?\\|";
+   QByteArray buf            = str.toUtf8();
+   char *s                   = buf.data();
+   size_t i;
+   for (i = 0; i < sizeof(chars) - 1; i++)
+      string_replace_all_chars(s, chars[i], '_');
+   return QString::fromUtf8(s);
+}
+
 static inline QString form_label(rarch_setting_t *setting)
 {
    return QString(sanitize_ampersand(setting->short_description)) + ":";
@@ -463,7 +475,7 @@ StringComboBox::StringComboBox(rarch_setting_t *setting, QWidget *parent) :
    ,m_setting(setting)
    ,m_value(setting->value.target.string)
 {
-   addItems(string_split_to_qt(QString(setting->values), '|'));
+   addItems(QString(setting->values).split('|'));
 
    connect(this, SIGNAL(currentTextChanged(const QString&)), this,
 		 SLOT(onCurrentTextChanged(const QString&)));
@@ -1999,7 +2011,7 @@ void PlaylistEntryDialog::loadPlaylistOptions()
          QString ui_display_name;
          QHash<QString, QString> hash;
          const core_info_t *core = &core_info_list->list[i];
-         QStringList databases   = string_split_to_qt(QString(core->databases), '|');
+         QStringList databases   = QString(core->databases).split('|');
 
          hash["core_name"]         = core->core_name;
          hash["core_display_name"] = core->display_name;
@@ -2139,7 +2151,7 @@ const QStringList PlaylistEntryDialog::getSelectedExtensions()
 
    /* Otherwise it would create a QStringList with a single blank entry... */
    if (!text.isEmpty())
-      list   = string_split_to_qt(text, ' ');
+      list   = text.split(' ');
    return list;
 }
 
@@ -5156,7 +5168,7 @@ void MainWindow::downloadThumbnail(QString system, QString title, QUrl url)
    if (!settings || m_pendingThumbnailDownloadTypes.isEmpty())
       return;
 
-   title        = getScrubbedString(title);
+   title        = scrub_qstring(title);
    downloadType = m_pendingThumbnailDownloadTypes.takeFirst();
    urlString    = QString(THUMBNAIL_URL_HEADER)
       + system + "/" + downloadType + "/" + title + THUMBNAIL_IMAGE_EXTENSION;
@@ -5305,7 +5317,7 @@ void MainWindow::downloadNextPlaylistThumbnail(
    if (!settings)
       return;
 
-   title = getScrubbedString(title);
+   title = scrub_qstring(title);
 
    urlString = QString(THUMBNAIL_URL_HEADER)
       + system + "/" + type + "/" + title + THUMBNAIL_IMAGE_EXTENSION;
@@ -5566,7 +5578,8 @@ QVector<OptionsPage*> AudioCategory::pages()
    QVector<OptionsPage*> pages;
 
    pages << new AudioPage(this);
-   pages << new MenuSoundsPage(this);
+   pages << new SimplePage(DISPLAYLIST_MENU_SOUNDS_LIST,
+         MENU_ENUM_LABEL_VALUE_MENU_SOUNDS, this);
 
    return pages;
 }
@@ -5641,17 +5654,6 @@ QWidget *AudioPage::widget()
    widget->setLayout(layout);
 
    return widget;
-}
-
-MenuSoundsPage::MenuSoundsPage(QObject *parent) :
-   OptionsPage(parent)
-{
-   setDisplayName(MENU_ENUM_LABEL_VALUE_MENU_SOUNDS);
-}
-
-QWidget *MenuSoundsPage::widget()
-{
-   return create_widget(DISPLAYLIST_MENU_SOUNDS_LIST);
 }
 
 InputCategory::InputCategory(QWidget *parent) :
@@ -5857,7 +5859,8 @@ QVector<OptionsPage*> NetworkCategory::pages()
    QVector<OptionsPage*> pages;
 
    pages << new NetplayPage(this);
-   pages << new UpdaterPage(this);
+   pages << new SimplePage(DISPLAYLIST_UPDATER_SETTINGS_LIST,
+         MENU_ENUM_LABEL_VALUE_UPDATER_SETTINGS, this);
 
    return pages;
 }
@@ -6009,17 +6012,6 @@ void NetplayPage::onRadioButtonClicked(int id)
 #else
    (void)id;
 #endif
-}
-
-UpdaterPage::UpdaterPage(QObject *parent) :
-   OptionsPage(parent)
-{
-   setDisplayName(MENU_ENUM_LABEL_VALUE_UPDATER_SETTINGS);
-}
-
-QWidget *UpdaterPage::widget()
-{
-   return create_widget(DISPLAYLIST_UPDATER_SETTINGS_LIST);
 }
 
 OnscreenDisplayCategory::OnscreenDisplayCategory(QWidget *parent) :
@@ -6429,7 +6421,9 @@ QWidget *ViewsPage::widget()
    FormLayout *leftLayout     = new FormLayout;
    QVBoxLayout *rightLayout   = new QVBoxLayout;
    SettingsGroup *quickMenu   = new SettingsGroup("Quick Menu");
-   QuickMenuPage *quickPage   = new QuickMenuPage(this);
+   OptionsPage *quickPage     = new SimplePage(
+         DISPLAYLIST_QUICK_MENU_VIEWS_SETTINGS_LIST,
+         MENU_ENUM_LABEL_VALUE_QUICK_MENU_VIEWS_SETTINGS, this);
    SettingsGroup *mainMenu    = new SettingsGroup("Main Menu");
    SettingsGroup *settings    = new SettingsGroup("Settings");
    SettingsGroup *tabs        = new SettingsGroup("Tabs");
@@ -6529,17 +6523,6 @@ QWidget *ViewsPage::widget()
    widget->setLayout(mainLayout);
 
    return widget;
-}
-
-QuickMenuPage::QuickMenuPage(QObject *parent) :
-   OptionsPage(parent)
-{
-   setDisplayName(MENU_ENUM_LABEL_VALUE_QUICK_MENU_VIEWS_SETTINGS);
-}
-
-QWidget *QuickMenuPage::widget()
-{
-   return create_widget(DISPLAYLIST_QUICK_MENU_VIEWS_SETTINGS_LIST);
 }
 
 AppearancePage::AppearancePage(QObject *parent) :
@@ -7065,21 +7048,9 @@ DriversCategory::DriversCategory(QWidget *parent) :
 QVector<OptionsPage*> DriversCategory::pages()
 {
    QVector<OptionsPage*> pages;
-
-   pages << new DriversPage(this);
-
+   pages << new SimplePage(DISPLAYLIST_DRIVER_SETTINGS_LIST,
+         MENU_ENUM_LABEL_VALUE_DRIVER_SETTINGS, this);
    return pages;
-}
-
-DriversPage::DriversPage(QObject *parent) :
-   OptionsPage(parent)
-{
-   setDisplayName(MENU_ENUM_LABEL_VALUE_DRIVER_SETTINGS);
-}
-
-QWidget *DriversPage::widget()
-{
-   return create_widget(DISPLAYLIST_DRIVER_SETTINGS_LIST);
 }
 
 /* DIRECTORY */
@@ -7094,20 +7065,8 @@ DirectoryCategory::DirectoryCategory(QWidget *parent) :
 QVector<OptionsPage*> DirectoryCategory::pages()
 {
    QVector<OptionsPage*> pages;
-
-   pages << new DirectoryPage(this);
-
+   pages << new SimplePage(DISPLAYLIST_DIRECTORY_SETTINGS_LIST, this);
    return pages;
-}
-
-DirectoryPage::DirectoryPage(QObject *parent) :
-   OptionsPage(parent)
-{
-}
-
-QWidget *DirectoryPage::widget()
-{
-   return create_widget(DISPLAYLIST_DIRECTORY_SETTINGS_LIST);
 }
 
 /* CONFIGURATION */
@@ -7122,20 +7081,8 @@ ConfigurationCategory::ConfigurationCategory(QWidget *parent) :
 QVector<OptionsPage*> ConfigurationCategory::pages()
 {
    QVector<OptionsPage*> pages;
-
-   pages << new ConfigurationPage(this);
-
+   pages << new SimplePage(DISPLAYLIST_CONFIGURATION_SETTINGS_LIST, this);
    return pages;
-}
-
-ConfigurationPage::ConfigurationPage(QObject *parent) :
-   OptionsPage(parent)
-{
-}
-
-QWidget *ConfigurationPage::widget()
-{
-   return create_widget(DISPLAYLIST_CONFIGURATION_SETTINGS_LIST);
 }
 
 /* CORE */
@@ -7150,20 +7097,8 @@ CoreCategory::CoreCategory(QWidget *parent) :
 QVector<OptionsPage*> CoreCategory::pages()
 {
    QVector<OptionsPage*> pages;
-
-   pages << new CorePage(this);
-
+   pages << new SimplePage(DISPLAYLIST_CORE_SETTINGS_LIST, this);
    return pages;
-}
-
-CorePage::CorePage(QObject *parent) :
-   OptionsPage(parent)
-{
-}
-
-QWidget *CorePage::widget()
-{
-   return create_widget(DISPLAYLIST_CORE_SETTINGS_LIST);
 }
 
 /* LOGGING */
@@ -7178,16 +7113,8 @@ LoggingCategory::LoggingCategory(QWidget *parent) :
 QVector<OptionsPage*> LoggingCategory::pages()
 {
    QVector<OptionsPage*> pages;
-   pages << new LoggingPage(this);
+   pages << new SimplePage(DISPLAYLIST_LOGGING_SETTINGS_LIST, this);
    return pages;
-}
-
-LoggingPage::LoggingPage(QObject *parent) :
-   OptionsPage(parent) { }
-
-QWidget *LoggingPage::widget()
-{
-   return create_widget(DISPLAYLIST_LOGGING_SETTINGS_LIST);
 }
 
 /* AI SERVICE */
@@ -7202,21 +7129,9 @@ AIServiceCategory::AIServiceCategory(QWidget *parent) :
 QVector<OptionsPage*> AIServiceCategory::pages()
 {
    QVector<OptionsPage*> pages;
-
-   pages << new AIServicePage(this);
-
+   pages << new SimplePage(DISPLAYLIST_AI_SERVICE_SETTINGS_LIST,
+         MENU_ENUM_LABEL_VALUE_AI_SERVICE_SETTINGS, this);
    return pages;
-}
-
-AIServicePage::AIServicePage(QObject *parent) :
-   OptionsPage(parent)
-{
-   setDisplayName(MENU_ENUM_LABEL_VALUE_AI_SERVICE_SETTINGS);
-}
-
-QWidget *AIServicePage::widget()
-{
-   return create_widget(DISPLAYLIST_AI_SERVICE_SETTINGS_LIST);
 }
 
 /* FRAME THROTTLE */
@@ -7231,33 +7146,11 @@ FrameThrottleCategory::FrameThrottleCategory(QWidget *parent) :
 QVector<OptionsPage*> FrameThrottleCategory::pages()
 {
    QVector<OptionsPage*> pages;
-
-   pages << new FrameThrottlePage(this);
-   pages << new RewindPage(this);
-
+   pages << new SimplePage(DISPLAYLIST_FRAME_THROTTLE_SETTINGS_LIST,
+         MENU_ENUM_LABEL_VALUE_FRAME_THROTTLE_SETTINGS, this);
+   pages << new SimplePage(DISPLAYLIST_REWIND_SETTINGS_LIST,
+         MENU_ENUM_LABEL_VALUE_REWIND_SETTINGS, this);
    return pages;
-}
-
-FrameThrottlePage::FrameThrottlePage(QObject *parent) :
-   OptionsPage(parent)
-{
-   setDisplayName(MENU_ENUM_LABEL_VALUE_FRAME_THROTTLE_SETTINGS);
-}
-
-QWidget *FrameThrottlePage::widget()
-{
-   return create_widget(DISPLAYLIST_FRAME_THROTTLE_SETTINGS_LIST);
-}
-
-RewindPage::RewindPage(QObject *parent) :
-   OptionsPage(parent)
-{
-   setDisplayName(MENU_ENUM_LABEL_VALUE_REWIND_SETTINGS);
-}
-
-QWidget *RewindPage::widget()
-{
-   return create_widget(DISPLAYLIST_REWIND_SETTINGS_LIST);
 }
 
 PlaylistModel::PlaylistModel(QObject *parent)
@@ -7570,7 +7463,8 @@ bool MainWindow::addDirectoryFilesToList(QProgressDialog *dialog,
                              * inside the archive
                              * doesn't have one of the chosen extensions,
                              * then we skip it. */
-                            if (extensions.contains(QFileInfo(pathData).suffix()))
+                            if (extensions.contains(
+                                  QString::fromUtf8(path_get_extension(pathData))))
                                add = true;
                         }
                         {
@@ -7579,7 +7473,8 @@ bool MainWindow::addDirectoryFilesToList(QProgressDialog *dialog,
                             * inside the archive
                             * doesn't have one of the chosen extensions,
                             * then we skip it. */
-                           if (extensions.contains(QFileInfo(pathData).suffix()))
+                           if (extensions.contains(
+                                 QString::fromUtf8(path_get_extension(pathData))))
                               add = true;
                         }
                      }
@@ -7877,7 +7772,7 @@ void MainWindow::addFilesToPlaylist(QStringList files)
                    * doesn't have one of the chosen extensions,
                    * then we skip it. */
                   if (!selectedExtensions.contains(
-                           QFileInfo(pathData).suffix()))
+                           QString::fromUtf8(path_get_extension(pathData))))
                   {
                      string_list_free(list);
                      continue;
