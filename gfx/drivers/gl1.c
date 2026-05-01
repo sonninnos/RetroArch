@@ -140,15 +140,15 @@ typedef struct gl1
 
    int version_major;
    int version_minor;
-   unsigned video_width;
-   unsigned video_height;
-   unsigned video_pitch;
+   unsigned frame_width;
+   unsigned frame_height;
+   unsigned frame_pitch;
    unsigned screen_width;
    unsigned screen_height;
    unsigned menu_width;
    unsigned menu_height;
    unsigned menu_pitch;
-   unsigned video_bits;
+   unsigned frame_bits;
    unsigned menu_bits;
    unsigned out_vp_width;
    unsigned out_vp_height;
@@ -847,16 +847,14 @@ static void gl1_raster_font_render_msg(
       font->block->fullscreen = full_screen;
 
    {
-      /* gl->video_width/height holds the core's emulated frame size
-       * (e.g. 256x224), not the window size — gl1 reuses that field
-       * for texture upload bookkeeping. The font viewport must cover
-       * the full window, so use screen_width/height instead. Fall
-       * back to video_width/height if the context driver did not
-       * report a screen size yet. */
+      /* The font viewport must cover the full window, so prefer
+       * screen_width/height (set by the context driver). Fall back
+       * to frame_width/height if the context driver hasn't reported
+       * a screen size yet. */
       unsigned width          = gl->screen_width
-         ? gl->screen_width  : gl->video_width;
+         ? gl->screen_width  : gl->frame_width;
       unsigned height         = gl->screen_height
-         ? gl->screen_height : gl->video_height;
+         ? gl->screen_height : gl->frame_height;
       float inv_tex_size_x    = 1.0f / font->tex_width;
       float inv_tex_size_y    = 1.0f / font->tex_height;
       float inv_win_width;
@@ -987,12 +985,10 @@ static void gl1_render_overlay(gl1_t *gl,
 {
    int i;
 
-   /* gl1 reuses video_width/height for the emulated core frame size
-    * (e.g. 256x224 for SNES, 320x240 default for the menu surface),
-    * not the window size. Fullscreen overlays must be drawn into the
-    * actual window viewport, so use screen_width/height instead.
-    * Fall back to the passed-in width/height if the context driver
-    * has not reported a screen size yet. */
+   /* Fullscreen overlays must be drawn into the actual window
+    * viewport, so prefer screen_width/height (set by the context
+    * driver). Fall back to the passed-in width/height if the
+    * context driver hasn't reported a screen size yet. */
    if (gl->screen_width)
       width  = gl->screen_width;
    if (gl->screen_height)
@@ -1160,19 +1156,19 @@ static void *gl1_init(const video_info_t *video,
    *input                               = NULL;
    *input_data                          = NULL;
 
-   gl1->video_width                     = video->width;
-   gl1->video_height                    = video->height;
+   gl1->frame_width                     = video->width;
+   gl1->frame_height                    = video->height;
 
    if (video->rgb32)
    {
-      gl1->video_bits                   = 32;
-      gl1->video_pitch                  = video->width * 4;
+      gl1->frame_bits                   = 32;
+      gl1->frame_pitch                  = video->width * 4;
       gl1->flags                       |= GL1_FLAG_RGB32;
    }
    else
    {
-      gl1->video_bits                   = 16;
-      gl1->video_pitch                  = video->width * 2;
+      gl1->frame_bits                   = 16;
+      gl1->frame_pitch                  = video->width * 2;
    }
 
    ctx_driver = video_context_driver_init_first(gl1,
@@ -1623,7 +1619,7 @@ static bool gl1_frame(void *data, const void *frame,
    bool draw                        = true;
    bool do_swap                     = false;
    gl1_t *gl1                       = (gl1_t*)data;
-   unsigned bits                    = gl1->video_bits;
+   unsigned bits                    = gl1->frame_bits;
    unsigned pot_width               = 0;
    unsigned pot_height              = 0;
    unsigned video_width             = video_info->width;
@@ -1674,15 +1670,15 @@ static bool gl1_frame(void *data, const void *frame,
 
    do_swap = frame || draw;
 
-   if (     (gl1->video_width  != frame_width)
-         || (gl1->video_height != frame_height)
-         || (gl1->video_pitch  != pitch))
+   if (     (gl1->frame_width  != frame_width)
+         || (gl1->frame_height != frame_height)
+         || (gl1->frame_pitch  != pitch))
    {
       if (frame_width > 4 && frame_height > 4)
       {
-         gl1->video_width  = frame_width;
-         gl1->video_height = frame_height;
-         gl1->video_pitch  = pitch;
+         gl1->frame_width  = frame_width;
+         gl1->frame_height = frame_height;
+         gl1->frame_pitch  = pitch;
 
          pot_width         = GET_POT(frame_width);
          pot_height        = GET_POT(frame_height);
@@ -1697,9 +1693,9 @@ static bool gl1_frame(void *data, const void *frame,
       }
    }
 
-   width         = gl1->video_width;
-   height        = gl1->video_height;
-   pitch         = gl1->video_pitch;
+   width         = gl1->frame_width;
+   height        = gl1->frame_height;
+   pitch         = gl1->frame_pitch;
 
    pot_width     = GET_POT(width);
    pot_height    = GET_POT(height);
@@ -1721,10 +1717,10 @@ static bool gl1_frame(void *data, const void *frame,
       frame_to_copy = gl1->video_buf;
    }
 
-   if (gl1->video_width != width || gl1->video_height != height)
+   if (gl1->frame_width != width || gl1->frame_height != height)
    {
-      gl1->video_width  = width;
-      gl1->video_height = height;
+      gl1->frame_width  = width;
+      gl1->frame_height = height;
    }
 
    if (gl1->ctx_driver->get_video_size)
