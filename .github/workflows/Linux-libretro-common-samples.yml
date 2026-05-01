@@ -80,6 +80,8 @@ jobs:
             task_queue_title_error_test
             tpool_wait_test
             retro_atomic_test
+            retro_atomic_extern_c_linkage_test
+            retro_atomic_extern_c_linkage_test_cxx
             retro_spsc_test
           )
 
@@ -212,6 +214,25 @@ jobs:
           # behavioural SPSC stress is already covered by the C test
           # binary above on this same host, and the C++11 backend bottoms
           # out through the same libstdc++ __atomic_* builtins.
+          #
+          # Two fixtures share the g++/clang++ x c++11/14/17 sweep:
+          #
+          #   cxx_smoke.cpp            : header included at C++ linkage,
+          #                              the "ordinary" C++ TU shape.
+          #   cxx_smoke_extern_c.cpp   : header included from inside an
+          #                              extern "C" { ... } wrap, the
+          #                              shape ui_qt.cpp uses under
+          #                              !CXX_BUILD.  This is the
+          #                              regression case for the
+          #                              RETRO_BEGIN_DECLS_CXX shield in
+          #                              retro_atomic.h's C++11 backend.
+          #                              The standalone build of the
+          #                              sample at samples/atomic/
+          #                              retro_atomic_extern_c_linkage/
+          #                              covers the same case under the
+          #                              default toolchain; this matrix
+          #                              extends coverage to clang++ and
+          #                              the higher language standards.
           set -u
           set -o pipefail
 
@@ -254,16 +275,41 @@ jobs:
           }
           EOF
 
+          # Regression fixture: include retro_atomic.h from inside an
+          # extern "C" wrap.  Faithful mirror of ui_qt.cpp's pattern.
+          # Pre-fix retro_atomic.h would emit ~80 "template with C
+          # linkage" errors here; the RETRO_BEGIN_DECLS_CXX shield
+          # around <atomic> makes this compile cleanly.
+          cat > "$tmpdir/cxx_smoke_extern_c.cpp" <<'EOF'
+          #include <cstdio>
+          #include <cstddef>
+
+          extern "C" {
+          #include <retro_atomic.h>
+          }
+
+          int main(void) {
+             retro_atomic_int_t ai; retro_atomic_int_init(&ai, 0);
+             retro_atomic_store_release_int(&ai, 7);
+             int v = retro_atomic_load_acquire_int(&ai);
+             std::printf("backend: %s\n", RETRO_ATOMIC_BACKEND_NAME);
+             std::puts(v == 7 ? "ALL OK" : "FAIL");
+             return v == 7 ? 0 : 1;
+          }
+          EOF
+
           for cxx in g++ clang++; do
             for std in c++11 c++14 c++17; do
-              echo "==> compile-test with $cxx -std=$std"
-              $cxx -std=$std -Wall -Wextra -pedantic -O2 \
-                  -I include \
-                  "$tmpdir/cxx_smoke.cpp" \
-                  -o "$tmpdir/cxx_smoke" \
-                || { echo "::error title=C++ compile failed::$cxx -std=$std"; exit 1; }
-              "$tmpdir/cxx_smoke" \
-                || { echo "::error title=C++ smoke failed::$cxx -std=$std"; exit 1; }
+              for fixture in cxx_smoke cxx_smoke_extern_c; do
+                echo "==> compile-test with $cxx -std=$std ($fixture)"
+                $cxx -std=$std -Wall -Wextra -pedantic -O2 \
+                    -I include \
+                    "$tmpdir/$fixture.cpp" \
+                    -o "$tmpdir/$fixture" \
+                  || { echo "::error title=C++ compile failed::$cxx -std=$std $fixture"; exit 1; }
+                "$tmpdir/$fixture" \
+                  || { echo "::error title=C++ smoke failed::$cxx -std=$std $fixture"; exit 1; }
+              done
             done
           done
 
