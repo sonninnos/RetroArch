@@ -111,8 +111,7 @@ static void crt_aspect_ratio_switch(
       video_st->current_video->set_viewport(
             video_st->data, width, height, true, true);
 
-   video_driver_apply_state_changes();
-
+   command_event(CMD_EVENT_VIDEO_APPLY_STATE_CHANGES, NULL);
 }
 
 static void crt_switch_set_aspect(
@@ -419,7 +418,7 @@ static void switch_res_crt(
             1.0f,
             false);
       video_driver_set_output_size(width , height);
-      video_driver_apply_state_changes();
+      command_event(CMD_EVENT_VIDEO_APPLY_STATE_CHANGES, NULL);
    }
 }
 #endif
@@ -517,7 +516,7 @@ void crt_switch_res_core(
          float fly_aspect               = (float)p_switch->fly_aspect;
          RARCH_LOG("[CRT] Restoring aspect ratio: %f.\n", fly_aspect);
          video_st->aspect_ratio         = fly_aspect;
-         video_driver_apply_state_changes();
+         command_event(CMD_EVENT_VIDEO_APPLY_STATE_CHANGES, NULL);
       }
    }
 }
