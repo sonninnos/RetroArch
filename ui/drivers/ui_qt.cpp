@@ -2490,20 +2490,19 @@ MainWindow::Theme MainWindow::getThemeFromString(QString themeString)
    return THEME_SYSTEM_DEFAULT;
 }
 
-QString MainWindow::getThemeString(Theme theme)
+const char *MainWindow::getThemeString(Theme theme)
 {
    switch (theme)
    {
-      case THEME_SYSTEM_DEFAULT:
-         return QString("default");
       case THEME_DARK:
-         return QString("dark");
+         return "dark";
       case THEME_CUSTOM:
-         return QString("custom");
+         return "custom";
+      case THEME_SYSTEM_DEFAULT:
       default:
          break;
    }
-   return QString("default");
+   return "default";
 }
 
 MainWindow::Theme MainWindow::theme() { return m_currentTheme; }
@@ -3960,36 +3959,28 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
 
 QSettings* MainWindow::settings() { return m_settings; }
 
-QString MainWindow::getCurrentViewTypeString()
+const char *MainWindow::getCurrentViewTypeString()
 {
-   switch (m_viewType)
-   {
-      case VIEW_TYPE_ICONS:
-         return QString("icons");
-      case VIEW_TYPE_LIST:
-      default:
-         break;
-   }
-
-   return QString("list");
+   if (m_viewType == VIEW_TYPE_ICONS)
+      return "icons";
+   return "list";
 }
 
-QString MainWindow::getCurrentThumbnailTypeString()
+const char *MainWindow::getCurrentThumbnailTypeString()
 {
    switch (m_thumbnailType)
    {
       case THUMBNAIL_TYPE_SCREENSHOT:
-         return QString("screenshot");
+         return "screenshot";
       case THUMBNAIL_TYPE_TITLE_SCREEN:
-         return QString("title");
+         return "title";
       case THUMBNAIL_TYPE_LOGO:
-         return QString("logo");
+         return "logo";
       case THUMBNAIL_TYPE_BOXART:
       default:
-         return QString("boxart");
+         break;
    }
-
-   return QString("list");
+   return "boxart";
 }
 
 ThumbnailType MainWindow::getThumbnailTypeFromString(QString thumbnailType)

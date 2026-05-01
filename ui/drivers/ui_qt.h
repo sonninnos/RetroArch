@@ -474,7 +474,7 @@ public:
    void setTheme(Theme theme = THEME_SYSTEM_DEFAULT);
    Theme theme();
    Theme getThemeFromString(QString themeString);
-   QString getThemeString(Theme theme);
+   const char *getThemeString(Theme theme);
    QString getSelectedCorePath();
    void showStatusMessage(QString msg, unsigned priority, unsigned duration, bool flush);
    bool showMessageBox(QString msg, MessageBoxType msgType = MSGBOX_TYPE_INFO, Qt::WindowModality modality = Qt::ApplicationModal, bool showDontAsk = true, bool *dontAsk = NULL);
@@ -482,10 +482,10 @@ public:
    void setCustomThemeString(QString qss);
    const QString& customThemeString() const;
    void setCurrentViewType(ViewType viewType);
-   QString getCurrentViewTypeString();
+   const char *getCurrentViewTypeString();
    ViewType getCurrentViewType();
    void setCurrentThumbnailType(ThumbnailType thumbnailType);
-   QString getCurrentThumbnailTypeString();
+   const char *getCurrentThumbnailTypeString();
    ThumbnailType getCurrentThumbnailType();
    ThumbnailType getThumbnailTypeFromString(QString thumbnailType);
    void setAllPlaylistsListMaxCount(int count);
