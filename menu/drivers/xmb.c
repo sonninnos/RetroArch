@@ -2793,7 +2793,7 @@ static void xmb_list_switch(xmb_handle_t *xmb)
    unsigned remember_selection_type = settings->uints.menu_remember_selection;
    unsigned xmb_system_tab          = xmb_get_system_tab(xmb, (unsigned)xmb->categories_selection_ptr);
    bool xmb_main_tab_selected       = false;
-   bool horizontal_animation        = settings->bools.menu_horizontal_animation;
+   bool horizontal_animation        = settings->bools.menu_horizontal_animation && xmb->allow_horizontal_animation;
    int list_delta                   = 0;
    unsigned animation_horizontal_highlight
                                     = settings->uints.menu_xmb_animation_horizontal_highlight;
@@ -3500,7 +3500,7 @@ static void xmb_populate_entries(void *data,
    else
       xmb_list_open(xmb,
             settings->uints.menu_xmb_animation_opening_main_menu,
-            settings->bools.menu_horizontal_animation,
+            settings->bools.menu_horizontal_animation && xmb->allow_horizontal_animation,
             settings->bools.savestate_thumbnail_enable);
 
    xmb_set_title(xmb);
@@ -9309,6 +9309,10 @@ static void xmb_frame(void *data, video_frame_info_t *video_info)
    if (ctx_gen != xmb->context_generation)
       goto ctx_destroyed;
 
+   /* Restore horizontal animation ability after first toggle */
+   if (xmb->is_first_frame)
+      xmb->allow_horizontal_animation = true;
+
    /* First-frame init done — subsequent frames are normal.
     * Cleared after the last ctx-destroyed guard so that a context
     * death mid-frame leaves the flag set for the retry. */
@@ -9998,6 +10002,10 @@ static void xmb_toggle(void *userdata, bool menu_on)
       menu_st->flags         &= ~MENU_ST_FLAG_PREVENT_POPULATE;
    else
       menu_st->flags         |=  MENU_ST_FLAG_PREVENT_POPULATE;
+
+   /* Prevent initial jumping with startup page and CLI launch */
+   if (xmb->is_first_frame)
+      xmb->allow_horizontal_animation = false;
 
    xmb_toggle_horizontal_list(xmb);
 
