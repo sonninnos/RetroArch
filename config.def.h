@@ -608,8 +608,6 @@
 
 #define DEFAULT_OVERLAY_SHOW_MOUSE_CURSOR false
 
-#define DEFAULT_DISPLAY_KEYBOARD_OVERLAY false
-
 #ifdef HAKCHI
 #define DEFAULT_INPUT_OVERLAY_OPACITY 0.5f
 #else
@@ -750,7 +748,6 @@
 #define DEFAULT_QUICK_MENU_SHOW_LATENCY true
 #define DEFAULT_QUICK_MENU_SHOW_REWIND true
 #define DEFAULT_QUICK_MENU_SHOW_OVERLAYS true
-#define DEFAULT_QUICK_MENU_SHOW_VIDEO_LAYOUT false
 #define DEFAULT_QUICK_MENU_SHOW_CHEATS true
 #define DEFAULT_QUICK_MENU_SHOW_SHADERS true
 #define DEFAULT_QUICK_MENU_SHOW_INFORMATION true
@@ -919,9 +916,6 @@
 #else
 #define DEFAULT_BLOCK_CONFIG_READ false
 #endif
-
-/* TODO/FIXME - this setting is thread-unsafe right now and can corrupt the stack - default to off */
-#define DEFAULT_AUTOMATICALLY_ADD_CONTENT_TO_PLAYLIST false
 
 #define DEFAULT_GAME_SPECIFIC_OPTIONS true
 #define DEFAULT_AUTO_OVERRIDES_ENABLE true
@@ -1365,10 +1359,6 @@
 
 /* Require connections only in slave mode */
 #define DEFAULT_NETPLAY_REQUIRE_SLAVES false
-
-/* When being client over netplay, use keybinds for
- * user 1 rather than user 2. */
-#define DEFAULT_NETPLAY_CLIENT_SWAP_INPUT true
 
 #define DEFAULT_NETPLAY_NAT_TRAVERSAL false
 
