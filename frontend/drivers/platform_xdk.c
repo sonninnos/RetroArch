@@ -414,7 +414,7 @@ static int frontend_xdk_parse_drive_list(void *data, bool load_content)
 }
 
 frontend_ctx_driver_t frontend_ctx_xdk = {
-   frontend_xdk_get_env_settings,/* env_settings */
+   frontend_xdk_get_environment_settings,/* env_settings */
    frontend_xdk_init,            /* init   */
    NULL,                         /* deinit */
    frontend_xdk_exitspawn,       /* exitspawn */
