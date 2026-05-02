@@ -2114,6 +2114,10 @@ static bool hlsl_d3d9_renderchain_init_shader_fvf(
                (const D3DVERTEXELEMENT9*)decl, (IDirect3DVertexDeclaration9**)&pass->vertex_decl)));
 }
 
+#ifdef DEBUG
+/* HLSL CTAB (constant table) bytecode dumper.
+ * Logs the contents of the CTAB embedded in compiled HLSL bytecode.
+ * Only active in debug builds; provided for shader bring-up and diagnostics. */
 static void d3d9_hlsl_ctab_dump(const DWORD *bytecode, size_t bytecode_dwords,
       const char *label)
 {
@@ -2162,6 +2166,7 @@ static void d3d9_hlsl_ctab_dump(const DWORD *bytecode, size_t bytecode_dwords,
       pos++;
    }
 }
+#endif
 static bool d3d9_hlsl_load_program_from_file_ex(
       LPDIRECT3DDEVICE9 dev,
       struct shader_pass *pass,
