@@ -302,40 +302,41 @@ static bool win32_display_server_set_window_opacity(
 static bool win32_display_server_set_window_progress(
       void *data, int progress, bool finished)
 {
-   uint8_t win32_flags     = 0;
-   HWND hwnd               = win32_get_window();
    dispserv_win32_t *serv  = (dispserv_win32_t*)data;
 
    if (!serv)
       return false;
 
 #ifdef HAS_TASKBAR_EXT
-   win32_flags             = win32_get_flags();
+   {
+      uint8_t win32_flags  = win32_get_flags();
+      HWND hwnd            = win32_get_window();
 
-   if (!serv->taskbar_list || !(win32_flags & WIN32_CMN_FLAG_TASKBAR_CREATED))
-      return false;
-
-   if (progress == -1)
-   {
-      if (ITaskbarList3_SetProgressState(
-               serv->taskbar_list, hwnd, TBPF_INDETERMINATE) != S_OK)
-         return false;
-   }
-   else if (finished)
-   {
-      if (ITaskbarList3_SetProgressState(
-               serv->taskbar_list, hwnd, TBPF_NOPROGRESS) != S_OK)
-         return false;
-   }
-   else if (progress >= 0)
-   {
-      if (ITaskbarList3_SetProgressState(
-               serv->taskbar_list, hwnd, TBPF_NORMAL) != S_OK)
+      if (!serv->taskbar_list || !(win32_flags & WIN32_CMN_FLAG_TASKBAR_CREATED))
          return false;
 
-      if (ITaskbarList3_SetProgressValue(
-               serv->taskbar_list, hwnd, progress, 100) != S_OK)
-         return false;
+      if (progress == -1)
+      {
+         if (ITaskbarList3_SetProgressState(
+                  serv->taskbar_list, hwnd, TBPF_INDETERMINATE) != S_OK)
+            return false;
+      }
+      else if (finished)
+      {
+         if (ITaskbarList3_SetProgressState(
+                  serv->taskbar_list, hwnd, TBPF_NOPROGRESS) != S_OK)
+            return false;
+      }
+      else if (progress >= 0)
+      {
+         if (ITaskbarList3_SetProgressState(
+                  serv->taskbar_list, hwnd, TBPF_NORMAL) != S_OK)
+            return false;
+
+         if (ITaskbarList3_SetProgressValue(
+                  serv->taskbar_list, hwnd, progress, 100) != S_OK)
+            return false;
+      }
    }
 #endif
 

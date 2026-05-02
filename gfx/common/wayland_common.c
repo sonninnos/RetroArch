@@ -520,7 +520,7 @@ static shm_buffer_t *create_shm_buffer(gfx_ctx_wayland_data_t *wl, int width,
    int height,
    uint32_t format)
 {
-   int fd, ofd;
+   int fd;
    struct wl_shm_pool *pool = NULL;
    void *data               = NULL;
    shm_buffer_t *buffer     = NULL;

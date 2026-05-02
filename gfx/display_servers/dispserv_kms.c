@@ -126,7 +126,6 @@ static void *kms_display_server_get_resolution_list(
    bool curr_interlaced              = false;
    bool curr_dblscan                 = false;
    float curr_refreshrate            = 0;
-   unsigned curr_orientation         = 0;
    struct video_display_config *conf = NULL;
 
 

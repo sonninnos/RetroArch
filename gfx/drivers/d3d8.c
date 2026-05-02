@@ -409,9 +409,6 @@ static void d3d8_set_vertices(
       unsigned pass,
       unsigned vert_width, unsigned vert_height, uint64_t frame_count)
 {
-   unsigned width  = d3d->vp.full_width;
-   unsigned height = d3d->vp.full_height;
-
    if (chain->last_width != vert_width || chain->last_height != vert_height)
    {
       Vertex vert[4];
@@ -2239,9 +2236,7 @@ static void d3d8_set_viewport(void *data,
 static bool d3d8_initialize(d3d8_video_t *d3d, const video_info_t *info)
 {
    struct LinkInfo link_info;
-   unsigned i           = 0;
    bool ret             = true;
-   settings_t *settings = config_get_ptr();
 
    if (!d3d)
       return false;

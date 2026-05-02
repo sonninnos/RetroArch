@@ -103,7 +103,7 @@ typedef struct oga_video
 
 static bool oga_create_display(oga_video_t* vid)
 {
-   int i, ret;
+   int i;
    drmModeConnector *connector;
    drmModeModeInfo *mode;
    drmModeEncoder *encoder;

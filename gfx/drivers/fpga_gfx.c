@@ -135,6 +135,9 @@ static void *fpga_init(const video_info_t *video,
 {
    fpga_t *fpga                         = (fpga_t*)calloc(1, sizeof(*fpga));
 
+   if (!fpga)
+      return NULL;
+
    *input                               = NULL;
    *input_data                          = NULL;
 
@@ -152,11 +155,6 @@ static void *fpga_init(const video_info_t *video,
    fpga_create(fpga);
 
    return fpga;
-
-error:
-   if (fpga)
-      free(fpga);
-   return NULL;
 }
 
 static bool fpga_frame(void *data, const void *frame,
