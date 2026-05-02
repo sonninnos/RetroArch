@@ -74,7 +74,6 @@ static enum gfx_ctx_api ctx_orbis_api = GFX_CTX_OPENGL_API;
 
 /* TODO/FIXME - global reference */
 extern bool platform_orbis_has_focus;
-extern SceKernelModule s_piglet_module;
 
 void orbis_ctx_destroy(void *data)
 {
@@ -287,17 +286,6 @@ static void orbis_ctx_swap_buffers(void *data)
    orbis_ctx_data_t *ctx_orbis = (orbis_ctx_data_t *)data;
    egl_swap_buffers(&ctx_orbis->egl);
 #endif
-}
-
-static gfx_ctx_proc_t orbis_ctx_get_proc_address(const char *symbol)
-{
-   gfx_ctx_proc_t ptr_sym = NULL;
-#ifdef HAVE_EGL
-   ptr_sym = egl_get_proc_address(symbol);
-#endif
-   if (!ptr_sym && s_piglet_module > 0)
-      sceKernelDlsym(s_piglet_module, symbol, (void **)&ptr_sym);
-   return ptr_sym;
 }
 
 static void orbis_ctx_bind_hw_render(void *data, bool enable)
