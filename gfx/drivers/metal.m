@@ -5409,61 +5409,6 @@ static uint32_t metal_get_flags(void *data);
 
 #pragma mark Graphics Context for Metal
 
-/* The graphics context for the Metal driver is just a stubbed out version
- * It supports getting metrics such as DPI which is needed for iOS/tvOS */
-#if defined(HAVE_COCOATOUCH)
-static bool metal_ctx_get_metrics(
-      void *data, enum display_metric_types type,
-      float *value)
-{
-    CGRect  screen_rect          = [[UIScreen mainScreen] bounds];
-    CGFloat scale                = [[UIScreen mainScreen] scale];
-    float   physical_width       = screen_rect.size.width  * scale;
-    float   physical_height      = screen_rect.size.height * scale;
-    float   dpi                  = 160                     * scale;
-    CGFloat max_size             = fmaxf(physical_width, physical_height);
-    NSInteger idiom_type         = UI_USER_INTERFACE_IDIOM();
-
-    switch (idiom_type)
-    {
-       case UIUserInterfaceIdiomPad:
-          dpi = 132 * scale;
-          break;
-       case UIUserInterfaceIdiomPhone:
-            if (max_size >= 2208.0)
-                /* Larger iPhones: iPhone Plus, X, XR, XS, XS Max,
-                 * 11, 12, 13, 14, etc */
-                dpi = 81 * scale;
-            else
-                dpi = 163 * scale;
-          break;
-       case UIUserInterfaceIdiomTV:
-       case UIUserInterfaceIdiomCarPlay:
-       case -1:
-          /* TODO/FIXME */
-          break;
-    }
-
-    switch (type)
-    {
-        case DISPLAY_METRIC_MM_WIDTH:
-            *value = physical_width;
-            break;
-        case DISPLAY_METRIC_MM_HEIGHT:
-            *value = physical_height;
-            break;
-        case DISPLAY_METRIC_DPI:
-            *value = dpi;
-            break;
-        case DISPLAY_METRIC_NONE:
-        default:
-            *value = 0;
-            return false;
-    }
-    return true;
-}
-#endif
-
 /* Metal context data for swap_buffers */
 static void *metal_ctx_data = NULL;
 
