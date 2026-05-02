@@ -5364,11 +5364,13 @@ static INLINE void video_driver_scanline_before_frame(video_driver_state_t *vide
    }
    else if (video_st->frame_count > refresh_rate)
    {
-      /* Disable if the core frame takes too long or has too much deviation */
-      double stddev = 0.0;
-      video_monitor_fps_statistics(NULL, &stddev, NULL);
+      /* Disable if the core and/or frame takes too long */
+      uint16_t frame_time_index = video_st->frame_time_count & (MEASURE_FRAME_TIME_SAMPLES_COUNT - 1);
+      uint16_t sample_index     = (uint16_t)((frame_time_index - 1) & (MEASURE_FRAME_TIME_SAMPLES_COUNT - 1));
+      retro_time_t frame_time   = video_st->frame_time_samples[sample_index];
 
-      if (stddev > 0.75f || core_run_time > frame_time_target)
+      if (     core_run_time > frame_time_target
+            || frame_time > frame_time_target * 2)
       {
          scanline_next = 0;
          scanline_hold = refresh_rate / 2;
@@ -5394,7 +5396,7 @@ static INLINE void video_driver_scanline_before_frame(video_driver_state_t *vide
       /* Core time based minimum nudge */
       while (  corelines > 0
             && scanline_next >= -corelines
-            && core_run_time < frame_time_target / 4)
+            && core_run_time < frame_time_target / 3)
       {
          scanline_next--;
          corelines--;
