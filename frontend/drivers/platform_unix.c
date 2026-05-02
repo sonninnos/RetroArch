@@ -560,7 +560,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity,
          savedState, savedStateSize);
 }
 
-static void frontend_android_get_name(char *s, size_t len)
+void frontend_android_get_name(char *s, size_t len)
 {
    system_property_get("getprop", "ro.product.model", s);
 }
@@ -595,7 +595,7 @@ static void frontend_android_get_version(int32_t *major,
    }
 }
 
-static void frontend_android_get_version_sdk(int32_t *sdk)
+void frontend_android_get_version_sdk(int32_t *sdk)
 {
    char os_version_str[PROP_VALUE_MAX] = {0};
    system_property_get("getprop", "ro.build.version.sdk", os_version_str);

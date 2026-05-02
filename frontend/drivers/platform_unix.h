@@ -386,6 +386,10 @@ void android_app_write_cmd(struct android_app *android_app, int8_t cmd);
 
 extern struct android_app *g_android;
 
+void frontend_android_get_name(char *s, size_t len);
+
+void frontend_android_get_version_sdk(int32_t *sdk);
+
 bool is_screen_reader_enabled(void);
 
 #ifdef HAVE_SAF

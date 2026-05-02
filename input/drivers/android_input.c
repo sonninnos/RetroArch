@@ -162,9 +162,6 @@ typedef struct android_input
    char device_model[256];
 } android_input_t;
 
-static void frontend_android_get_version_sdk(int32_t *sdk);
-static void frontend_android_get_name(char *s, size_t len);
-
 bool (*engine_lookup_name)(char *buf,
       int *vendorId, int *productId, size_t len, int id);
 void (*engine_handle_dpad)(struct android_app *, AInputEvent*, int, int);
