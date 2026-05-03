@@ -4362,7 +4362,12 @@ bool command_event(enum event_command cmd, void *data)
                *video_st                         = video_state_get_ptr();
             rarch_system_info_t *sys_info        = &runloop_st->system;
             
-            /* Restore unpaused state */
+            /* Restore unpaused state. The recursive command_event call
+             * here re-enters this dispatcher; the UNPAUSE branch is
+             * deliberately small (clears flags, resumes audio) and
+             * does not touch core state, so the self-call is safe.
+             * Any future addition to the UNPAUSE handler that would
+             * touch core state must consider that we're mid-deinit. */
             runloop_st->paused_hotkey = false;
             command_event(CMD_EVENT_UNPAUSE, NULL);
 

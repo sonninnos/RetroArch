@@ -2521,8 +2521,13 @@ void command_event_reinit(const int flags)
    /* Restore the snapshot and ask the new driver to replay it so the
     * paused-core background appears in the first post-reinit frame.
     * The buffer stays live across subsequent frame_cb calls from the
-    * core (which overwrite the pointer) and is either reused on the
-    * next reinit or freed at shutdown. */
+    * core (which overwrite the pointer) and is reused on the next
+    * reinit.  The static cached_snapshot itself is not freed at
+    * shutdown - it's a one-shot leak bounded at one framebuffer's
+    * worth of memory, reclaimed by the OS on process exit.  Adding
+    * a teardown hook would mean wiring command_event_reinit's
+    * statics into retroarch_deinit_drivers; the size cap makes the
+    * leak benign in practice, so we leave it. */
    if (cached_snapshot_p && cached_snapshot_h)
    {
       video_st->frame_cache_data   = cached_snapshot;
