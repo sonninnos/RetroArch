@@ -4379,6 +4379,23 @@ bool command_event(enum event_command cmd, void *data)
                content_wait_for_save_state_task();
             }
 
+            /* Wait for any in-flight save / load state tasks before
+             * tearing down the core. Both task_save_handler and
+             * task_load_handler run on the threaded task worker and
+             * call into core function pointers (retro_serialize via
+             * content_get_serialized_data, retro_unserialize via
+             * core_unserialize). If a worker is mid-call when
+             * runloop_event_deinit_core runs uninit_libretro_symbols,
+             * the worker dispatches into a closed dylib.
+             *
+             * The autosave_auto_save wait above only covers the
+             * auto-state save we just kicked off; it does not cover
+             * a manually-triggered save state task (menu / hotkey /
+             * netplay) that was already in flight when the user
+             * closed content with savestate_auto_save disabled. */
+            content_wait_for_save_state_task();
+            content_wait_for_load_state_task();
+
             /* Save last selected disk index, if required */
             if (sys_info)
                disk_control_save_image_index(&sys_info->disk_control);
