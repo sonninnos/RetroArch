@@ -72,7 +72,7 @@ struct autosave
 {
    void *buffer;
    const void *retro_buffer;
-   const char *path;
+   char *path;
    slock_t *lock;
    slock_t *cond_lock;
    scond_t *cond;
@@ -238,10 +238,22 @@ static autosave_t *autosave_new(const char *path,
    if (compress)
       handle->flags             |= AUTOSAVE_FLAG_COMPRESS_FILES;
    handle->retro_buffer          = data;
-   handle->path                  = path;
+   /* Own the path string rather than borrowing it. The caller's
+    * path comes from task_save_files->elems[i].data, freed by
+    * path_deinit_savefile() during the deinit chain. The worker
+    * thread reads handle->path via intfstream_open_*(). Owning
+    * the string keeps the lifetime contract local to
+    * autosave_new/autosave_free rather than depending on top-
+    * level deinit ordering at every call site. */
+   if (!(handle->path = strdup(path)))
+   {
+      free(handle);
+      return NULL;
+   }
 
    if (!(buf = malloc(len)))
    {
+      free(handle->path);
       free(handle);
       return NULL;
    }
@@ -263,6 +275,7 @@ static autosave_t *autosave_new(const char *path,
          slock_free(handle->cond_lock);
       if (handle->cond)
          scond_free(handle->cond);
+      free(handle->path);
       free(handle->buffer);
       free(handle);
       return NULL;
@@ -276,6 +289,7 @@ static autosave_t *autosave_new(const char *path,
       slock_free(handle->lock);
       slock_free(handle->cond_lock);
       scond_free(handle->cond);
+      free(handle->path);
       free(handle->buffer);
       free(handle);
       return NULL;
@@ -305,6 +319,10 @@ static void autosave_free(autosave_t *handle)
    if (handle->buffer)
       free(handle->buffer);
    handle->buffer = NULL;
+
+   if (handle->path)
+      free(handle->path);
+   handle->path = NULL;
 
    free(handle);
 }
