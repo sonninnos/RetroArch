@@ -201,10 +201,17 @@ void runahead_secondary_core_destroy(void *data)
 
    dylib_close(runloop_st->secondary_lib_handle);
    runloop_st->secondary_lib_handle = NULL;
-   filestream_delete(runloop_st->secondary_library_path);
+   /* Delete the on-disk copy of the secondary core and free the
+    * path string. The NULL check guards both: filestream_delete
+    * is currently NULL-safe but the explicit guard here also
+    * documents the intent and protects against future changes
+    * to the VFS layer's NULL handling. */
    if (runloop_st->secondary_library_path)
+   {
+      filestream_delete(runloop_st->secondary_library_path);
       free(runloop_st->secondary_library_path);
-   runloop_st->secondary_library_path = NULL;
+      runloop_st->secondary_library_path = NULL;
+   }
 }
 
 static char *get_tmpdir_alloc(const char *override_dir)
@@ -629,12 +636,23 @@ static void mylist_resize(my_list *list,
 
    if (new_size > list->capacity)
    {
+      void **new_data;
+
       if (new_capacity < list->capacity * 2)
          new_capacity = list->capacity * 2;
 
-      /* try to realloc */
-      list->data      = (void**)realloc(
+      /* Try to realloc. On OOM, leave the list at its current
+       * capacity and silently no-op the resize - the caller
+       * (mylist_add_element) tolerates list->data[old_size]
+       * being NULL: runahead_input_state_set_last guards on
+       * 'if (element)' before writing to it, and downstream
+       * code already accepts that runahead state may be
+       * incomplete. */
+      new_data = (void**)realloc(
             (void*)list->data, new_capacity * sizeof(void*));
+      if (!new_data)
+         return;
+      list->data = new_data;
 
       for (i = list->capacity; i < new_capacity; i++)
          list->data[i] = NULL;
@@ -670,9 +688,16 @@ static void mylist_resize(my_list *list,
 
 static void *mylist_add_element(my_list *list)
 {
-   int old_size = list->size;
-   if (list)
-      mylist_resize(list, old_size + 1, true);
+   int old_size;
+   if (!list)
+      return NULL;
+   old_size = list->size;
+   mylist_resize(list, old_size + 1, true);
+   /* mylist_resize may have failed to grow on OOM, in which case
+    * list->size is still old_size and list->data[old_size] is
+    * out of bounds. Re-check before returning. */
+   if (list->size <= old_size)
+      return NULL;
    return list->data[old_size];
 }
 
@@ -706,12 +731,20 @@ static void mylist_create(my_list **list_p, int initial_capacity,
       mylist_destroy(list_p);
 
    list               = (my_list*)malloc(sizeof(my_list));
+   if (!list)
+   {
+      *list_p         = NULL;
+      return;
+   }
    *list_p            = list;
    list->size         = 0;
    list->constructor  = constructor;
    list->destructor   = destructor;
    list->data         = (void**)calloc(initial_capacity, sizeof(void*));
-   list->capacity     = initial_capacity;
+   /* On calloc OOM, leave list->data NULL and capacity 0;
+    * mylist_resize's realloc grows from there on first add and
+    * a subsequent realloc(NULL, n) is well-defined. */
+   list->capacity     = list->data ? initial_capacity : 0;
 }
 
 static void *input_list_element_constructor(void)
