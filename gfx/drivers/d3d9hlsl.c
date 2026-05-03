@@ -5683,17 +5683,17 @@ static char *d3d9_hlsl_init_vs_output_members(const char *source)
 static char *d3d9_hlsl_convert_macro_loops(const char *source)
 {
    /* Find #define candidates: single-param function-like macros */
-   const char *p;
    char macro_name[128];
    char macro_param[64];
    const char *macro_body_start = NULL;
    size_t macro_body_len = 0;
-   size_t macro_name_len = 0;
-   size_t macro_param_len = 0;
+#ifdef DEBUG
+   size_t macro_name_len          = 0;
+   size_t macro_param_len         = 0;
+#endif
    const char *macro_define_start = NULL;
-   const char *macro_define_end = NULL;
-
-   p = source;
+   const char *macro_define_end   = NULL;
+   const char *p = source;
    while (*p)
    {
       /* Look for #define at start of line */
@@ -5706,7 +5706,8 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
             const char *nm = dir + 6;
             const char *nm_end, *pp, *pp_end, *body, *body_end;
 
-            while (*nm == ' ' || *nm == '\t') nm++;
+            while (*nm == ' ' || *nm == '\t')
+               nm++;
             nm_end = nm;
             while (d3d9_hlsl_is_ident_char(*nm_end)) nm_end++;
 
@@ -5714,14 +5715,16 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
             if (*nm_end == '(' && nm_end > nm)
             {
                pp = nm_end + 1;
-               while (*pp == ' ' || *pp == '\t') pp++;
+               while (*pp == ' ' || *pp == '\t')
+                  pp++;
                pp_end = pp;
                while (d3d9_hlsl_is_ident_char(*pp_end)) pp_end++;
                if (pp_end > pp && *pp_end == ')')
                {
                   /* Found #define NAME(PARAM) — get the body */
                   body = pp_end + 1;
-                  while (*body == ' ' || *body == '\t') body++;
+                  while (*body == ' ' || *body == '\t')
+                     body++;
 
                   /* Find end of body (handle line continuations) */
                   body_end = body;
@@ -5730,7 +5733,10 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                      if (*body_end == '\n')
                      {
                         if (body_end > body && body_end[-1] == '\\')
-                        { body_end++; continue; }
+                        {
+                           body_end++;
+                           continue;
+                        }
                         break;
                      }
                      body_end++;
@@ -5746,7 +5752,10 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                         if (strncmp(scan, pp, pl) == 0
                               && (scan == body || !d3d9_hlsl_is_ident_char(scan[-1]))
                               && !d3d9_hlsl_is_ident_char(scan[pl]))
-                        { found = true; break; }
+                        {
+                           found = true;
+                           break;
+                        }
                         scan++;
                      }
 
@@ -5755,9 +5764,9 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                      {
                         /* Now search for consecutive invocations:
                          * NAME(0) NAME(1) ... NAME(N) */
-                        int max_seq = -1;
+                        int max_seq           = -1;
                         const char *seq_start = NULL, *seq_end_ptr = NULL;
-                        const char *s = source;
+                        const char *s         = source;
 
                         while (*s)
                         {
@@ -5815,28 +5824,33 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                         if (max_seq >= 4 && seq_start && seq_end_ptr)
                         {
                            /* Build the replacement loop */
-                           size_t src_len_full = strlen(source);
-                           size_t body_l = (size_t)(body_end - body);
-                           char *out;
                            size_t cap, opos;
-                           size_t nml = (size_t)(nm_end - nm);
+                           size_t src_len_full = strlen(source);
+                           size_t body_l       = (size_t)(body_end - body);
+                           char *out;
+                           size_t nml          = (size_t)(nm_end - nm);
 
                            memcpy(macro_name, nm, nml);
-                           macro_name[nml] = '\0';
-                           macro_name_len = nml;
+                           macro_name[nml]     = '\0';
+#ifdef DEBUG
+                           macro_name_len      = nml;
+#endif
                            memcpy(macro_param, pp, (size_t)(pp_end - pp));
                            macro_param[(size_t)(pp_end - pp)] = '\0';
-                           macro_param_len = (size_t)(pp_end - pp);
-                           macro_body_start = body;
-                           macro_body_len = body_l;
-                           macro_define_start = p;
-                           macro_define_end = body_end;
+#ifdef DEBUG
+                           macro_param_len     = (size_t)(pp_end - pp);
+#endif
+                           macro_body_start    = body;
+                           macro_body_len      = body_l;
+                           macro_define_start  = p;
+                           macro_define_end    = body_end;
                            if (*macro_define_end == '\n')
                               macro_define_end++;
 
                            cap = src_len_full + body_l + 256;
                            out = (char*)malloc(cap);
-                           if (!out) return NULL;
+                           if (!out)
+                              return NULL;
                            opos = 0;
 
                            /* Copy everything before the #define, commenting it out */
@@ -5849,7 +5863,7 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                            /* Comment out the #define line */
                            {
                               const char *dl = "/* ";
-                              size_t dll = 3;
+                              size_t dll     = 3;
                               size_t def_len = (size_t)(macro_define_end - macro_define_start);
                               /* Strip any trailing newline from the define for the comment */
                               size_t comment_len = def_len;
@@ -5917,7 +5931,10 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                                     char *tmp;
                                     cap *= 2;
                                     if (!(tmp = (char*)realloc(out, cap)))
-                                    { free(out); return NULL; }
+                                    {
+                                       free(out);
+                                       return NULL;
+                                    }
                                     out = tmp;
                                  }
                                  out[opos++] = *bp_src++;
@@ -5932,7 +5949,10 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                                  char *tmp;
                                  cap *= 2;
                                  if (!(tmp = (char*)realloc(out, cap)))
-                                 { free(out); return NULL; }
+                                 {
+                                    free(out);
+                                    return NULL;
+                                 }
                                  out = tmp;
                               }
                               memcpy(out + opos, cl, 3); opos += 3;
@@ -5946,7 +5966,10 @@ static char *d3d9_hlsl_convert_macro_loops(const char *source)
                                  char *tmp;
                                  cap *= 2;
                                  if (!(tmp = (char*)realloc(out, cap)))
-                                 { free(out); return NULL; }
+                                 {
+                                    free(out);
+                                    return NULL;
+                                 }
                                  out = tmp;
                               }
                               memcpy(out + opos, seq_end_ptr, tail);
