@@ -4063,6 +4063,25 @@ void runloop_event_deinit_core(void)
    runloop_state_t *runloop_st = &runloop_state;
    settings_t        *settings = config_get_ptr();
 
+#ifdef HAVE_THREADS
+   /* Defensive: ensure the autosave worker thread is joined
+    * before we touch core-owned memory. autosave_t->retro_buffer
+    * borrows a pointer from core_get_memory(); if a worker is
+    * mid-read when retro_unload_game / retro_deinit frees that
+    * region, the worker reads freed memory.
+    *
+    * The standard MAIN_DEINIT path already calls autosave_deinit
+    * before reaching here, so this is normally a no-op. The error
+    * paths in retroarch_main_init (the dummy-core fallback at
+    * retroarch.c:8314 and the error: label at retroarch.c:8414)
+    * reach CMD_EVENT_CORE_DEINIT without the explicit teardown,
+    * which can leave a worker alive if event_init_content failed
+    * after starting one. autosave_deinit is idempotent so the
+    * extra call is safe regardless of which path got us here. */
+   if (runloop_st->flags & RUNLOOP_FLAG_USE_SRAM)
+      autosave_deinit();
+#endif
+
    core_unload_game();
 
    /* Reset core sensor tracking — the core is going away */
