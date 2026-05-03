@@ -8081,6 +8081,12 @@ bool retroarch_main_init(int argc, char *argv[])
       goto error;
    }
 
+   /* Mark error_sjlj_context as live. retroarch_fail checks this
+    * before longjmp'ing; reinit-time driver_init failures that
+    * reach retroarch_fail outside this function will log and
+    * return rather than landing in a stale jmp_buf. */
+   global->flags |= GLOB_FLG_INIT_IN_PROGRESS;
+
    global->flags |= GLOB_FLG_ERR_ON_INIT;
 
    /* Have to initialise non-file logging once at the start... */
@@ -8425,11 +8431,13 @@ bool retroarch_main_init(int argc, char *argv[])
    game_ai_init();
 #endif
 
+   global->flags &= ~GLOB_FLG_INIT_IN_PROGRESS;
    return true;
 
 error:
    command_event(CMD_EVENT_CORE_DEINIT, NULL);
    runloop_state_get_ptr()->flags            &= ~RUNLOOP_FLAG_IS_INITED;
+   global->flags &= ~GLOB_FLG_INIT_IN_PROGRESS;
 
    return false;
 }
@@ -8840,12 +8848,29 @@ size_t retroarch_get_capabilities(enum rarch_capabilities type,
 void retroarch_fail(int err_code, const char *err)
 {
    global_t *global                = global_get_ptr();
-   /* We cannot longjmp unless we're in retroarch_main_init().
-    * If not, something went very wrong, and we should
-    * just exit right away. */
    strlcpy(global->error_string, err,
          sizeof(global->error_string));
-   longjmp(global->error_sjlj_context, err_code);
+
+   /* Only longjmp if retroarch_main_init's setjmp is still live.
+    * Outside that scope (e.g. when drivers_init runs from
+    * command_event_reinit for a fullscreen toggle, video driver
+    * swap, or any other CMD_EVENT_REINIT path) the
+    * error_sjlj_context jmp_buf points into stack memory that
+    * was unwound long ago. Jumping there is undefined behavior;
+    * on most platforms it crashes or silently corrupts state.
+    *
+    * Driver init failures during reinit are not recoverable in
+    * this function (we don't have a clean rollback path for the
+    * partial reinit), but they're survivable - the prior driver
+    * state is gone but we can leave the user in the menu rather
+    * than crashing. The caller (drivers_init) will see the
+    * subsystem fail to init and that subsystem's downstream code
+    * is expected to NULL-check its driver pointers. */
+   if (global->flags & GLOB_FLG_INIT_IN_PROGRESS)
+      longjmp(global->error_sjlj_context, err_code);
+
+   RARCH_ERR("[Core] retroarch_fail outside retroarch_main_init: %s\n",
+         err);
 }
 
 /* Called on close content, checks if we need to also exit retroarch */
