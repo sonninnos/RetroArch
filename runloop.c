@@ -7486,7 +7486,7 @@ int runloop_iterate(void)
    bsv_movie_next_frame(input_st);
    if (input_st->bsv_movie_state.flags & BSV_FLAG_MOVIE_END)
    {
-      movie_stop_playback(input_st);
+      movie_stop(input_st);
       command_event(CMD_EVENT_PAUSE, NULL);
    }
 #endif
