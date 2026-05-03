@@ -9070,8 +9070,22 @@ void deinit_netplay(void)
                                 |   NET_DRIVER_ST_FLAG_NETPLAY_IS_CLIENT);
 
 #if HAVE_RUNAHEAD
-      /* Reinitialize preemptive frames if enabled */
-      preempt_init(runloop_state_get_ptr());
+      /* Reinitialize preemptive frames if we're disabling
+       * netplay mid-session. Skip if the core isn't running:
+       * deinit_netplay is also called from the full shutdown
+       * chain (RARCH_CTL_MAIN_DEINIT at retroarch.c:8511) and
+       * from the retroarch_main_init error: label, where the
+       * subsequent CMD_EVENT_CORE_DEINIT will tear down
+       * preempt frames anyway via preempt_deinit. Allocating
+       * a fresh preempt frame buffer just to free it seconds
+       * later is wasted work, and the synchronous retro_run
+       * path inside preempt_init at runahead.c:1501 is a
+       * surprising side effect to fire from within a deinit
+       * chain. RUNLOOP_FLAG_CORE_RUNNING is cleared at the
+       * top of CMD_EVENT_UNLOAD_CORE (retroarch.c:3749),
+       * making it the right discriminator. */
+      if (runloop_state_get_ptr()->flags & RUNLOOP_FLAG_CORE_RUNNING)
+         preempt_init(runloop_state_get_ptr());
 #endif
 
       if (net_st->core_netpacket_interface
