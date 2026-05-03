@@ -93,6 +93,19 @@ typedef struct rcheevos_locals_t
     * polling per frame; plain enum access would be a data race
     * with no memory barrier. */
    retro_atomic_int_t queued_command;
+
+   /* Bumped on every load lifecycle reset (rcheevos_load and
+    * rcheevos_unload). Captured at rc_client_begin_identify_and_load_game
+    * time and passed through the callback's userdata; the
+    * background callback compares its captured value against the
+    * current value at completion and drops stale completions
+    * whose target rcheevos_locals state has been reset out from
+    * under them. Without this, a load for game A that completes
+    * after the user has closed content and started loading game B
+    * would write FINALIZE_LOAD into queued_command and cause the
+    * main thread to apply game A's finalization to game B's
+    * memory map. */
+   retro_atomic_int_t load_generation;
 #endif
 
    char user_agent_prefix[128];       /* RetroArch/OS version information */
