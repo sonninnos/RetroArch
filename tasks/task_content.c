@@ -1610,10 +1610,7 @@ static bool content_load(content_ctx_info_t *info,
       return false;
 
    if (p_content->flags & CONTENT_ST_FLAG_PENDING_SUBSYSTEM_INIT)
-   {
-      command_event(CMD_EVENT_CORE_INIT, NULL);
       content_clear_subsystem();
-   }
 
 #ifdef HAVE_GFX_WIDGETS
 #ifdef HAVE_CONFIGFILE
