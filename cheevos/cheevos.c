@@ -90,7 +90,9 @@ static rcheevos_locals_t rcheevos_locals =
    NULL, /* client */
    {{0}},/* memory */
 #ifdef HAVE_THREADS
-   CMD_EVENT_NONE, /* queued_command */
+   /* queued_command (atomic). CMD_EVENT_NONE == 0; static
+    * zero-initialization satisfies all retro_atomic.h backends. */
+   0,
 #endif
    "",   /* user_agent_prefix */
    "",   /* user_agent_core */
@@ -812,7 +814,8 @@ bool rcheevos_unload(void)
    rc_client_unload_game(rcheevos_locals.client);
 
 #ifdef HAVE_THREADS
-   rcheevos_locals.queued_command = CMD_EVENT_NONE;
+   retro_atomic_store_release_int(&rcheevos_locals.queued_command,
+         CMD_EVENT_NONE);
 #endif
 
    if (rcheevos_locals.memory.count > 0)
@@ -836,7 +839,8 @@ bool rcheevos_unload(void)
    }
 
 #ifdef HAVE_THREADS
-   rcheevos_locals.queued_command = CMD_EVENT_NONE;
+   retro_atomic_store_release_int(&rcheevos_locals.queued_command,
+         CMD_EVENT_NONE);
 #endif
 
    if (!config_get_ptr()->arrays.cheevos_token[0])
@@ -919,7 +923,8 @@ static void rcheevos_toggle_hardcore_active(rcheevos_locals_t* locals)
             /* have to "schedule" this.
              * CMD_EVENT_REWIND_DEINIT should
              * only be called on the main thread */
-            rcheevos_locals.queued_command = CMD_EVENT_REWIND_DEINIT;
+            retro_atomic_store_release_int(&rcheevos_locals.queued_command,
+                  CMD_EVENT_REWIND_DEINIT);
          }
          else
 #endif
@@ -943,7 +948,8 @@ static void rcheevos_toggle_hardcore_active(rcheevos_locals_t* locals)
             /* have to "schedule" this.
              * CMD_EVENT_REWIND_INIT should
              * only be called on the main thread */
-            rcheevos_locals.queued_command = CMD_EVENT_REWIND_INIT;
+            retro_atomic_store_release_int(&rcheevos_locals.queued_command,
+                  CMD_EVENT_REWIND_INIT);
          }
          else
 #endif
@@ -1114,14 +1120,23 @@ Test all the achievements (call once per frame).
 void rcheevos_test(void)
 {
 #ifdef HAVE_THREADS
-   if (rcheevos_locals.queued_command != CMD_EVENT_NONE)
+   /* Snapshot the queued command once with an acquire-load. The
+    * matching release-stores are at the writer sites in this file
+    * (rcheevos_unload, the rewind toggles, and the bg-thread
+    * finalize at the bottom of rcheevos_client_load_game_callback).
+    * Without the snapshot the three reads at the previous
+    * !=NONE / ==FINALIZE / dispatch sites could each see a
+    * different value if a writer fires between them. */
+   int cmd = retro_atomic_load_acquire_int(&rcheevos_locals.queued_command);
+   if (cmd != CMD_EVENT_NONE)
    {
-      if (rcheevos_locals.queued_command == CMD_CHEEVOS_FINALIZE_LOAD)
+      if (cmd == CMD_CHEEVOS_FINALIZE_LOAD)
          rcheevos_finalize_game_load_on_ui_thread();
       else
-         command_event(rcheevos_locals.queued_command, NULL);
+         command_event((enum event_command)cmd, NULL);
 
-      rcheevos_locals.queued_command = CMD_EVENT_NONE;
+      retro_atomic_store_release_int(&rcheevos_locals.queued_command,
+            CMD_EVENT_NONE);
    }
 #endif
 
@@ -1733,7 +1748,8 @@ static void rcheevos_client_load_game_callback(int result,
    /* Have to "schedule" this. Game image should not be
     * loaded into memory on background thread */
    if (!task_is_on_main_thread())
-      rcheevos_locals.queued_command = (enum event_command)CMD_CHEEVOS_FINALIZE_LOAD;
+      retro_atomic_store_release_int(&rcheevos_locals.queued_command,
+            CMD_CHEEVOS_FINALIZE_LOAD);
    else
 #endif
       rcheevos_finalize_game_load_on_ui_thread();
@@ -1752,7 +1768,8 @@ bool rcheevos_load(const void *data)
       && settings->bools.cheevos_enable;
 
 #ifdef HAVE_THREADS
-   rcheevos_locals.queued_command = CMD_EVENT_NONE;
+   retro_atomic_store_release_int(&rcheevos_locals.queued_command,
+         CMD_EVENT_NONE);
 #endif
 
    /* If achievements are not enabled, or the core doesn't

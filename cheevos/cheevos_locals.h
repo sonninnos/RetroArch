@@ -26,6 +26,7 @@
 
 #ifdef HAVE_THREADS
 #include <rthreads/rthreads.h>
+#include <retro_atomic.h>
 #endif
 
 #include <retro_common_api.h>
@@ -85,7 +86,13 @@ typedef struct rcheevos_locals_t
    rc_libretro_memory_regions_t memory;/* achievement addresses to core memory mappings */
 
 #ifdef HAVE_THREADS
-   enum event_command queued_command; /* action queued by background thread to be run on main thread */
+   /* Action queued by a background thread (e.g. the rcheevos
+    * client's HTTP completion thread) to be dispatched on the
+    * main thread by rcheevos_test. Atomic because writers can
+    * be on a worker thread while the main-thread reader is
+    * polling per frame; plain enum access would be a data race
+    * with no memory barrier. */
+   retro_atomic_int_t queued_command;
 #endif
 
    char user_agent_prefix[128];       /* RetroArch/OS version information */
