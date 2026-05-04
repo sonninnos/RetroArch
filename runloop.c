@@ -7224,7 +7224,7 @@ end:
       return RUNLOOP_STATE_PAUSE;
    }
 #if HAVE_MENU
-   if (menu_was_alive)
+   if (menu_was_alive && (runloop_st->flags & RUNLOOP_FLAG_CORE_RUNNING))
       return RUNLOOP_STATE_MENU;
 #endif
    return RUNLOOP_STATE_ITERATE;
