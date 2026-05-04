@@ -4411,10 +4411,7 @@ void video_driver_frame(const void *data, unsigned width,
             video_st->title_buf,
             sizeof(video_st->window_title));
 
-      if (video_info.fps_show)
-         _len = strlcpy(status_text,
-               msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE),
-               sizeof(status_text));
+      status_text[0] = '\0';
 
       video_st->flags |= VIDEO_FLAG_WINDOW_TITLE_UPDATE;
    }
@@ -4759,6 +4756,7 @@ void video_driver_frame(const void *data, unsigned width,
        && !((video_info.menu_st_flags & MENU_ST_FLAG_SCREENSAVER_ACTIVE))
 #endif
        && !video_info.notifications_hidden
+       && *status_text
       )
    {
 #if defined(HAVE_GFX_WIDGETS)
