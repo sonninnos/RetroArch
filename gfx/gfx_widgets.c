@@ -474,7 +474,7 @@ void gfx_widgets_msg_queue_push(
 
                entry.easing_enum    = EASING_OUT_QUAD;
                entry.tag            = (uintptr_t)msg_widget;
-               entry.duration       = MSG_QUEUE_ANIMATION_DURATION * 2;
+               entry.duration       = MSG_QUEUE_ANIMATION_DURATION;
                entry.target_value   = p_dispwidget->msg_queue_height / 2.0f;
                entry.subject        = &msg_widget->msg_transition_animation;
                entry.cb             = msg_widget_msg_transition_animation_done;
@@ -1224,7 +1224,7 @@ static void gfx_widgets_draw_task_msg(
    float msg_queue_task_negative[16] = COLOR_HEX_TO_FLOAT(ICON_COLOR_RED, 1.0f);
    float msg_queue_task_positive[16] = COLOR_HEX_TO_FLOAT(ICON_COLOR_GREEN, 1.0f);
 
-   unsigned msg_queue_height                = p_dispwidget->msg_queue_height;
+   unsigned msg_queue_height         = p_dispwidget->msg_queue_height;
    unsigned text_color;
    unsigned bar_width;
 
@@ -1260,12 +1260,12 @@ static void gfx_widgets_draw_task_msg(
       _len = snprintf(task_percentage, sizeof(task_percentage),
             "%i%%", msg->task_progress);
 
-   task_percentage_offset = p_dispwidget->gfx_widget_fonts.msg_queue.glyph_width * (_len + 1);
+   task_percentage_offset = p_dispwidget->gfx_widget_fonts.msg_queue.glyph_width * _len;
    rect_width             = (msg_alternative)
          ? video_width
-         : (p_dispwidget->msg_queue_padding * 5.0f) + msg->width + task_percentage_offset;
-   bar_width              = rect_width * msg->task_progress/100.0f;
-   text_color             = COLOR_TEXT_ALPHA(TEXT_COLOR_INFO, (unsigned)(msg->alpha*255.0f));
+         : p_dispwidget->simple_widget_padding + msg->width + (p_dispwidget->msg_queue_icon_size_x / 2) + task_percentage_offset;
+   bar_width              = rect_width * msg->task_progress / 100.0f;
+   text_color             = COLOR_TEXT_ALPHA(TEXT_COLOR_INFO, (unsigned)(msg->alpha * 255.0f));
 
    /* Rect */
    if (     msg->flags & DISPWIDG_FLAG_TASK_FINISHED
@@ -1438,10 +1438,12 @@ static void gfx_widgets_draw_task_msg(
    }
 
    /* Progress text */
-   text_color = COLOR_TEXT_ALPHA(TEXT_COLOR_INFO, (unsigned)(msg->alpha * 127.5f));
+   text_color = COLOR_TEXT_ALPHA(TEXT_COLOR_INFO, (unsigned)(msg->alpha * 128));
    gfx_widgets_draw_text(&p_dispwidget->gfx_widget_fonts.msg_queue,
       task_percentage,
-      rect_x + rect_width - p_dispwidget->gfx_widget_fonts.msg_queue.glyph_width * 3,
+      rect_x + rect_width - (msg_alternative
+            ? p_dispwidget->gfx_widget_fonts.msg_queue.glyph_width * 3
+            : p_dispwidget->gfx_widget_fonts.msg_queue.glyph_width),
       text_y_base,
       video_width, video_height,
       text_color,
