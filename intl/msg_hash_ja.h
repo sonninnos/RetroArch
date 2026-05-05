@@ -86,6 +86,14 @@ MSG_HASH(
    "使用するコアを選択します。"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CORE_LIST_UNLOAD,
+   "コアをアンロード"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CORE_LIST_UNLOAD,
+   "ロードされたコアを解放します。"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_HELP_CORE_LIST,
    "Libretro コア実装を参照します。コアディレクトリに設定されているパスがブラウザの開始ディレクトリになります。空白の場合、ルートから開始します。\nコアディレクトリにディレクトリパスが設定されている場合、メニューはそのディレクトリをトップフォルダとして使用し、フルパスが設定されている場合は、そのファイルがあるフォルダから開始します。"
    )
@@ -150,6 +158,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_SUBLABEL_SHOW_WIMP,
    "従来のデスクトップメニューを開きます。"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_MENU_DISABLE_KIOSK_MODE,
+   "キオスクモードを無効化"
    )
 MSG_HASH(
    MENU_ENUM_SUBLABEL_MENU_DISABLE_KIOSK_MODE,
@@ -226,6 +238,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_HELP_QUIT_RETROARCH,
    "RetroArch を終了します。プログラムを (SIGKILL などで) 強制終了すると、設定を保存せずに RetroArch を終了します。 Unix 系では、SIGINT/SIGTERM を有効にすることで設定の保存を含むクリーンな初期化を可能にします。"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CLOUD_SYNC_SYNC_NOW,
+   "今すぐ同期"
    )
 
 /* Main Menu > Load Core */
