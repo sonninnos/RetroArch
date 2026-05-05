@@ -27,6 +27,7 @@
 #include <rthreads/rthreads.h>
 #include <file/file_path.h>
 #include <retro_miscellaneous.h>
+#include <retro_timers.h>
 #include <time/rtime.h>
 
 #ifdef HAVE_CONFIG_H
@@ -778,6 +779,11 @@ static void task_load_handler(retro_task_t *task)
    uint8_t flg;
    ssize_t remaining, bytes_read;
    save_task_state_t *state = (save_task_state_t*)task->state;
+   video_driver_state_t *video_st  = video_state_get_ptr();
+
+   /* Ensure the core is ready for loading states (Dolphin CLI) */
+   while (video_st->frame_count < 2)
+      retro_sleep(1);
 
    if (!state->file)
    {
